@@ -2,9 +2,41 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow create: if owns(userId);
+      allow read, update, delete: if owns(userId);
+
+      match /{document=**} {
+        allow read, write: if owns(userId);
+      }
+    }
+
+    match /workoutLibrary/{document=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /nutritionLibrary/{document=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /recommendationRules/{document=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /educationLibrary/{document=**} {
+      allow read: if signedIn();
+      allow write: if false;
     }
   }
 }

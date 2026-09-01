@@ -10,30 +10,28 @@ import {
   uploadProfilePhoto,
   watchCloudState
 } from "./cloud.js";
+import {
+  createDefaultState,
+  normalizeEquipment,
+  normalizeRace,
+  normalizeReadiness,
+  normalizeState,
+  normalizeWorkout
+} from "./core/schema.js";
+import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/storage.js";
 
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "pace-dashboard-portable-v1";
   const BASELINE_3K_SECONDS = 16 * 60;
   const TRAINING_DAYS = [0, 1, 3, 4]; // domingo, segunda, quarta, quinta
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
-  const defaultState = () => ({
-    version: 3,
-    profile: { name: "Samuel", photo: null },
-    workouts: [],
-    weights: [{ id: "peso-inicial", date: localISO(), weight: 49 }],
-    equipment: [{ id: "adios-pro-4", name: "Adidas Adizero Adios Pro 4", type: "Prova", lifespan: 350, totalKm: 0, planned: true }],
-    races: [],
-    readiness: {},
-    raceChecklist: {},
-    settings: { adaptiveGoal: true, weeklyGoal: 10, theme: "system", primaryGoal: "consistency", onboarded: false }
-  });
-
-  let volatileState = defaultState();
-  let state = loadState();
+  let volatileState = createDefaultState();
+  let state;
+  try { state = loadLocalState(); }
+  catch (_) { state = volatileState; }
   let adaptivePlan = [];
   let selectedPlan = 0;
   let selectedRaceHistory = null;
@@ -83,66 +81,8 @@ import {
   function paceRange(seconds, spread = 10) { return `${paceShort(seconds - spread)}–${paceShort(seconds + spread)} /km`; }
   function paceSeconds(run) { return Number(run.durationSeconds || run.result?.officialSeconds || 0) / Number(run.distance || run.result?.distance || 1); }
 
-  function loadState() {
-    try { return normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY))); }
-    catch (_) { return volatileState; }
-  }
-
-  function normalizeState(input) {
-    const base = defaultState();
-    if (!input || typeof input !== "object") return base;
-    return {
-      version: 3,
-      profile: {
-        name: typeof input.profile?.name === "string" ? input.profile.name.slice(0, 40) : base.profile.name,
-        photo: typeof input.profile?.photo === "string" && (/^data:image\//.test(input.profile.photo) || /^https:\/\//.test(input.profile.photo)) ? input.profile.photo : null
-      },
-      workouts: Array.isArray(input.workouts) ? input.workouts.filter(validWorkout).map(normalizeWorkout) : [],
-      weights: Array.isArray(input.weights) && input.weights.length ? input.weights.filter(validWeight).map(normalizeWeight) : base.weights,
-      equipment: Array.isArray(input.equipment) ? input.equipment.filter(validEquipment).map(normalizeEquipment) : base.equipment,
-      races: Array.isArray(input.races) ? input.races.filter(validRace).map(normalizeRace) : [],
-      readiness: input.readiness && typeof input.readiness === "object" ? Object.fromEntries(Object.entries(input.readiness).slice(-60).map(([date, item]) => [String(date).slice(0, 10), normalizeReadiness(item)])) : {},
-      raceChecklist: input.raceChecklist && typeof input.raceChecklist === "object" ? input.raceChecklist : {},
-      settings: {
-        adaptiveGoal: input.settings?.adaptiveGoal !== false,
-        weeklyGoal: clamp(Number(input.settings?.weeklyGoal) || 10, 3, 200),
-        theme: ["system", "dark", "light"].includes(input.settings?.theme) ? input.settings.theme : "system",
-        primaryGoal: ["consistency", "5k", "10k", "health"].includes(input.settings?.primaryGoal) ? input.settings.primaryGoal : "consistency",
-        onboarded: input.settings?.onboarded === undefined ? Boolean(input.workouts?.length) : Boolean(input.settings.onboarded)
-      }
-    };
-  }
-
-  function normalizeReadiness(item) {
-    return {
-      sleep: clamp(Number(item?.sleep) || 3, 1, 5),
-      energy: clamp(Number(item?.energy) || 3, 1, 5),
-      soreness: clamp(Number(item?.soreness) || 1, 1, 5),
-      notes: String(item?.notes || "").slice(0, 240)
-    };
-  }
-
-  function validWorkout(item) { return item && typeof item.date === "string" && Number(item.distance) > 0 && Number(item.durationSeconds) > 0; }
-  function normalizeWorkout(item) { return { id: String(item.id || uid()), date: item.date.slice(0, 10), distance: Number(item.distance), durationSeconds: Number(item.durationSeconds), rpe: String(item.rpe || "4").slice(0, 4), type: String(item.type || "Corrida").slice(0, 40), feeling: String(item.feeling || "Normal").slice(0, 30), stitch: String(item.stitch || "Nenhuma").slice(0, 30), shoe: String(item.shoe || "").slice(0, 80), notes: String(item.notes || "").slice(0, 500) }; }
-  function validWeight(item) { return item && typeof item.date === "string" && Number(item.weight) >= 30 && Number(item.weight) <= 250; }
-  function normalizeWeight(item) { return { id: String(item.id || uid()), date: item.date.slice(0, 10), weight: Number(item.weight) }; }
-  function validEquipment(item) { return item && typeof item.name === "string" && item.name.trim(); }
-  function normalizeEquipment(item) { return { id: String(item.id || uid()), name: item.name.slice(0, 80), type: String(item.type || "Treino").slice(0, 30), lifespan: clamp(Number(item.lifespan) || 600, 100, 2000), totalKm: Math.max(0, Number(item.totalKm) || 0), planned: Boolean(item.planned) }; }
-  function validRace(item) { return item && typeof item.name === "string" && typeof item.date === "string" && Number(item.distance) > 0; }
-  function normalizeRace(item) {
-    const result = item.result && Number(item.result.officialSeconds) > 0 ? {
-      officialSeconds: Number(item.result.officialSeconds), distance: Number(item.result.distance || item.distance),
-      placement: item.result.placement ? Number(item.result.placement) : null, bib: String(item.result.bib || "").slice(0, 20),
-      feeling: String(item.result.feeling || "").slice(0, 40), weather: String(item.result.weather || "").slice(0, 60),
-      splits: Array.isArray(item.result.splits) ? item.result.splits.map(Number).filter(value => value > 0 && value < 3600).slice(0, 100) : [],
-      shoe: String(item.result.shoe || "").slice(0, 80), notes: String(item.result.notes || "").slice(0, 800)
-    } : null;
-    return { id: String(item.id || uid()), name: item.name.slice(0, 80), date: item.date.slice(0, 10), distance: Number(item.distance), location: String(item.location || "").slice(0, 80), goalSeconds: Number(item.goalSeconds) || null, createdAt: String(item.createdAt || localISO()).slice(0, 10), status: result || item.status === "completed" ? "completed" : "planned", result };
-  }
-
   function persistLocal() {
-    volatileState = state;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return true; }
+    try { state = saveLocalState(state); volatileState = state; return true; }
     catch (_) { showToast("Não foi possível salvar. Exporte um backup e verifique o armazenamento do navegador."); return false; }
   }
 
@@ -789,8 +729,20 @@ import {
     cloudUnsubscribe?.(); cloudUnsubscribe = null; cloudUser = user;
     if (!user) { setCloudUI(cloudConfigured ? "signedOut" : "local"); return; }
     setCloudUI("connecting"); let firstSnapshot = true;
-    cloudUnsubscribe = watchCloudState(user.uid, async remoteState => {
-      if (remoteState) { applyingCloud = true; state = normalizeState(remoteState); persistLocal(); renderAll(); applyingCloud = false; if ((state.settings.onboarded || state.workouts.length) && $("#onboardingModal").open) $("#onboardingModal").close(); setCloudUI("online"); if (firstSnapshot) showToast("Dados sincronizados com a nuvem."); firstSnapshot = false; return; }
+    cloudUnsubscribe = watchCloudState(user.uid, async (remoteState, cloudMeta = {}) => {
+      if (remoteState) {
+        const wasFirstSnapshot = firstSnapshot;
+        firstSnapshot = false;
+        const normalizedRemote = normalizeState(remoteState);
+        const nextState = wasFirstSnapshot ? mergeLocalAndRemote(state, normalizedRemote) : normalizedRemote;
+        const shouldPersistMigration = wasFirstSnapshot && (cloudMeta.source === "legacy" || JSON.stringify(nextState) !== JSON.stringify(normalizedRemote));
+        applyingCloud = true; state = nextState; persistLocal(); renderAll(); applyingCloud = false;
+        if ((state.settings.onboarded || state.workouts.length) && $("#onboardingModal").open) $("#onboardingModal").close();
+        setCloudUI("online");
+        if (shouldPersistMigration) await saveCloudState(user.uid, state);
+        if (wasFirstSnapshot) showToast(cloudMeta.source === "legacy" ? "Dados antigos migrados com segurança." : "Dados sincronizados com a nuvem.");
+        return;
+      }
       if (firstSnapshot) { firstSnapshot = false; try { if (state.profile.photo?.startsWith("data:image/")) { state.profile.photo = await uploadProfilePhoto(user.uid, state.profile.photo); pendingPhoto = state.profile.photo; persistLocal(); } await saveCloudState(user.uid, state); setCloudUI("online"); showToast("Dados locais enviados para a nuvem."); } catch (error) { setCloudUI("error", friendlyFirebaseError(error)); } }
     }, error => setCloudUI("error", friendlyFirebaseError(error)));
   }

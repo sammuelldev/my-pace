@@ -4,6 +4,21 @@ const SDK_VERSION = "12.18.0";
 let services = null;
 let auth = null;
 let db = null;
+const cloudCache = new Map();
+
+const COLLECTIONS = {
+  workouts: "workouts",
+  races: "races",
+  weights: "bodyMetrics",
+  equipment: "equipment",
+  nutritionHistory: "nutritionHistory",
+  recommendationFeedback: "recommendationFeedback",
+  achievements: "achievements",
+  journal: "journal"
+};
+
+const clone = value => JSON.parse(JSON.stringify(value));
+const comparable = value => JSON.stringify(value ?? null);
 
 export function firebaseIsConfigured() {
   const required = ["apiKey", "authDomain", "projectId", "storageBucket", "appId"];
@@ -57,21 +72,112 @@ export async function signOutCloud() {
   if (auth && services) await services.signOut(auth);
 }
 
+function rootDataFromState(state) {
+  return clone({
+    schemaVersion: state.schemaVersion || state.version || 4,
+    profile: state.profile,
+    goals: state.goals,
+    trainingProfile: state.trainingProfile,
+    nutritionProfile: state.nutritionProfile,
+    onboarding: state.onboarding,
+    settings: state.settings,
+    raceChecklist: state.raceChecklist,
+    meta: state.meta
+  });
+}
+
+function itemsById(items = []) {
+  return new Map(items.filter(item => item?.id).map(item => [String(item.id), clone(item)]));
+}
+
+function stateCollections(state) {
+  const result = Object.fromEntries(Object.keys(COLLECTIONS).map(key => [key, itemsById(state[key])]));
+  result.readiness = new Map(Object.entries(state.readiness || {}).map(([date, value]) => [date, { ...clone(value), id: date, date }]));
+  return result;
+}
+
+async function readCollection(uid, collectionName) {
+  const snapshot = await services.getDocs(services.collection(db, "users", uid, collectionName));
+  return snapshot.docs.map(item => ({ ...item.data(), id: item.id }));
+}
+
+async function readGranularState(uid, rootData) {
+  const keys = Object.keys(COLLECTIONS);
+  const [readinessItems, ...collections] = await Promise.all([
+    readCollection(uid, "readiness"),
+    ...keys.map(key => readCollection(uid, COLLECTIONS[key]))
+  ]);
+  const state = {
+    ...clone(rootData),
+    readiness: Object.fromEntries(readinessItems.map(item => [item.id, item])),
+    ...Object.fromEntries(keys.map((key, index) => [key, collections[index]]))
+  };
+  delete state.remoteUpdatedAt;
+  delete state.legacyMigratedAt;
+  cloudCache.set(uid, clone(state));
+  return state;
+}
+
+async function readLegacyState(uid) {
+  const legacy = await services.getDoc(services.doc(db, "users", uid, "pace", "dashboard"));
+  return legacy.exists() && legacy.data()?.state ? legacy.data().state : null;
+}
+
 export function watchCloudState(uid, onData, onError) {
   if (!db || !services) return () => {};
-  const target = services.doc(db, "users", uid, "pace", "dashboard");
-  return services.onSnapshot(target, snapshot => {
-    onData(snapshot.exists() ? snapshot.data().state : null);
+  const target = services.doc(db, "users", uid);
+  return services.onSnapshot(target, async snapshot => {
+    try {
+      if (snapshot.exists()) {
+        onData(await readGranularState(uid, snapshot.data()), { source: "granular" });
+        return;
+      }
+      const legacy = await readLegacyState(uid);
+      if (legacy) cloudCache.set(uid, clone(legacy));
+      onData(legacy, { source: legacy ? "legacy" : "empty" });
+    } catch (error) { onError(error); }
   }, onError);
 }
 
 export async function saveCloudState(uid, state) {
   if (!db || !services || !uid) return;
-  const target = services.doc(db, "users", uid, "pace", "dashboard");
-  await services.setDoc(target, {
-    state: JSON.parse(JSON.stringify(state)),
-    updatedAt: services.serverTimestamp()
-  });
+  const previous = cloudCache.get(uid) || {};
+  const previousCollections = stateCollections(previous);
+  const nextCollections = stateCollections(state);
+  const operations = [];
+
+  for (const [stateKey, collectionName] of [...Object.entries(COLLECTIONS), ["readiness", "readiness"]]) {
+    const before = previousCollections[stateKey] || new Map();
+    const after = nextCollections[stateKey] || new Map();
+    for (const [id, data] of after) {
+      if (comparable(before.get(id)) !== comparable(data)) {
+        operations.push({ kind: "set", ref: services.doc(db, "users", uid, collectionName, id), data });
+      }
+    }
+    for (const id of before.keys()) {
+      if (!after.has(id)) operations.push({ kind: "delete", ref: services.doc(db, "users", uid, collectionName, id) });
+    }
+  }
+
+  for (let index = 0; index < operations.length; index += 400) {
+    const batch = services.writeBatch(db);
+    operations.slice(index, index + 400).forEach(operation => {
+      if (operation.kind === "set") batch.set(operation.ref, operation.data);
+      else batch.delete(operation.ref);
+    });
+    await batch.commit();
+  }
+
+  const rootData = rootDataFromState(state);
+  const previousRoot = rootDataFromState(previous);
+  if (comparable(rootData) !== comparable(previousRoot) || operations.length) {
+    await services.setDoc(services.doc(db, "users", uid), {
+      ...rootData,
+      remoteUpdatedAt: services.serverTimestamp(),
+      legacyMigratedAt: state.meta?.migratedFrom ? services.serverTimestamp() : null
+    }, { merge: true });
+  }
+  cloudCache.set(uid, clone(state));
 }
 
 export async function uploadProfilePhoto(uid, dataUrl) {
