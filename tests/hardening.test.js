@@ -18,6 +18,7 @@ test("login e identidade visual usam a nova marca sem elementos removidos", () =
   const app = readFileSync("js/app.js", "utf8");
   assert.doesNotMatch(html, /MY PACE 2\.0|auth-orbit|auth-benefits|loading-ring/);
   assert.match(html, /dual-dot-loader/);
+  assert.match(readFileSync("css/styles.css", "utf8"), /dual-dot-loader i:first-child[^}]*animation-duration:3\.2s/);
   assert.match(html, /assets\/mypace-runner\.png/);
   assert.equal(existsSync("assets/mypace-runner.png"), true);
   assert.equal(existsSync("assets/mypace-runner-icon.png"), true);
