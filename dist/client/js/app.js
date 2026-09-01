@@ -23,13 +23,13 @@ import {
 } from "./core/schema.js";
 import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocalState, userStorageKey } from "./core/storage.js";
 import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingInitialValues, onboardingStep } from "./domains/onboarding.js";
-import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace-engine.js";
+import { buildAthleteModel } from "./domains/pace-engine.js";
+import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitutions } from "./domains/training-engine.js";
 
 (() => {
   "use strict";
 
   const BASELINE_3K_SECONDS = 16 * 60;
-  const TRAINING_DAYS = [0, 1, 3, 4]; // domingo, segunda, quarta, quinta
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -51,10 +51,10 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
   let activeStorageKey = null;
   let pendingAccountName = "";
   let onboardingPreparedForUid = null;
+  let substitutionSessionId = null;
 
   function uid() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
   function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
-  function round(value, digits = 1) { const power = 10 ** digits; return Math.round(value * power) / power; }
   function localISO(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
   function parseDate(date) { return new Date(`${date}T12:00:00`); }
   function addDays(date, days) { const next = new Date(date); next.setDate(next.getDate() + days); return next; }
@@ -227,67 +227,7 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
   }
 
   function buildAdaptivePlan() {
-    const profile = athleteProfile();
-    const race = activeRace();
-    const today = parseDate(localISO());
-    const maxHorizon = addDays(today, 48);
-    const raceDate = race ? parseDate(race.date) : null;
-    const end = raceDate && raceDate <= maxHorizon ? raceDate : maxHorizon;
-    const sessions = [];
-    let cursor = new Date(today);
-    let qualityIndex = 0;
-
-    while (cursor <= end && sessions.length < 28) {
-      const date = localISO(cursor);
-      if (race && date === race.date) {
-        sessions.push({ date, type: "Prova", distance: race.distance, rpe: "7–9", pace: race.goalSeconds ? paceRange(race.goalSeconds / race.distance, 5) : "Estratégia de prova", objective: `Executar ${race.name}`, details: "Largada controlada, ritmo estável e progressão apenas se houver domínio do esforço.", race: true });
-        break;
-      }
-      if (TRAINING_DAYS.includes(cursor.getDay())) {
-        const week = Math.floor((cursor - today) / 604800000);
-        const daysToRace = race ? daysBetween(date, race.date) : 999;
-        const progression = 1 + Math.min(week * 0.055, 0.28);
-        let type, distance, rpe, pace, objective, details;
-
-        if (daysToRace <= 2) {
-          type = daysToRace === 1 ? "Ativação" : "Recuperação";
-          distance = clamp(profile.baseDistance * 0.65, 2, 4);
-          rpe = "2–3"; pace = paceRange(profile.avgPace + 65);
-          objective = "Chegar descansado à largada";
-          details = "Corrida curta e solta. Se houver fadiga, troque por descanso ou caminhada.";
-        } else if (cursor.getDay() === 0) {
-          type = "Longão";
-          const target = race ? Math.max(race.distance * 0.9, profile.longest) : profile.longest * 1.25;
-          distance = clamp(profile.baseDistance * 1.3 * progression, 3.5, target);
-          rpe = "4–5"; pace = paceRange(profile.avgPace + 55);
-          objective = race ? `Construir resistência para ${numberBR(race.distance)} km` : "Ampliar resistência com controle";
-          details = "Comece mais lento do que parece necessário e termine com sensação de reserva.";
-        } else if (cursor.getDay() === 3) {
-          const isInterval = qualityIndex++ % 2 === 0;
-          type = isInterval ? "Intervalado" : "Tempo run";
-          distance = clamp(profile.baseDistance * progression, 2.8, race ? race.distance * 0.85 : 8);
-          rpe = isInterval ? "6–7" : "5–6";
-          pace = paceRange(profile.avgPace + (isInterval ? -18 : 5));
-          objective = isInterval ? "Ganhar velocidade sem perder a forma" : "Sustentar um ritmo firme por mais tempo";
-          details = isInterval ? "10 min leves · blocos fortes com recuperação equivalente · desaquecimento." : "1 km leve · bloco contínuo controlado · final leve.";
-        } else if (cursor.getDay() === 4) {
-          type = "Recuperação";
-          distance = clamp(profile.baseDistance * 0.72, 2, 5);
-          rpe = "2–3"; pace = paceRange(profile.avgPace + 75);
-          objective = "Absorver o estímulo anterior";
-          details = "Ritmo de conversa. Caminhe por um minuto se o corpo pedir.";
-        } else {
-          type = "Corrida leve";
-          distance = clamp(profile.baseDistance * progression, 2.5, race ? race.distance * 0.8 : 8);
-          rpe = "3–4"; pace = paceRange(profile.avgPace + 45);
-          objective = "Criar consistência e economia";
-          details = "Passos curtos, ombros soltos e respiração estável do início ao fim.";
-        }
-        sessions.push({ date, type, distance: round(distance), rpe, pace, objective, details });
-      }
-      cursor = addDays(cursor, 1);
-    }
-    return sessions.map(session => explainTrainingRecommendation(session, state, profile.model));
+    return createAdaptiveTrainingPlan(state);
   }
 
   function weeklyWorkouts() {
@@ -390,7 +330,7 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
     $("#todayPace").textContent = session.pace;
     $("#todayObjective").textContent = `◉ ${session.objective}`;
     $("#todayDetails").textContent = session.details;
-    const checkIn = state.readiness[today];
+    const checkIn = session.date === today ? state.readiness[today] : null;
     const score = readinessScore(checkIn);
     if (score !== null && score < 45) {
       $("#todayRpe").textContent = "2–3";
@@ -521,7 +461,7 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push({ ...session, index });
     });
-    $("#planList").innerHTML = [...groups.values()].map((sessions, week) => `<div class="plan-week"><span>SEMANA ${week + 1}</span>${sessions.map(session => { const date = parseDate(session.date); return `<button class="plan-item ${session.index === selectedPlan ? "active" : ""} ${session.race ? "race-plan-item" : ""}" data-plan-index="${session.index}"><span class="date"><b>${String(date.getDate()).padStart(2, "0")}</b><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small></span><span class="session"><strong>${escapeHTML(session.type)}</strong><small>${numberBR(session.distance)} km · RPE ${escapeHTML(session.rpe)}</small></span><span>›</span></button>`; }).join("")}</div>`).join("");
+    $("#planList").innerHTML = [...groups.values()].map((sessions, week) => `<div class="plan-week"><span>SEMANA ${week + 1}</span>${sessions.map(session => { const date = parseDate(session.date); return `<button class="plan-item ${session.index === selectedPlan ? "active" : ""} ${session.race ? "race-plan-item" : ""}" data-plan-index="${session.index}"><span class="date"><b>${String(date.getDate()).padStart(2, "0")}</b><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small></span><span class="session"><strong>${escapeHTML(session.type)}</strong><small>${numberBR(session.distance)} km · RPE ${escapeHTML(session.rpe)}</small>${session.substituted ? "<em>adaptado por você</em>" : ""}</span><span>›</span></button>`; }).join("")}</div>`).join("");
     renderPlanDetail();
   }
 
@@ -531,7 +471,8 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
     const recommendation = session.recommendation;
     const confidenceNames = { low: "baixa", moderate: "moderada", high: "alta" };
     const explanation = recommendation ? `<div class="recommendation-why"><div><span>POR QUE AGORA</span><b class="confidence ${escapeHTML(recommendation.confidence.level)}">Confiança ${confidenceNames[recommendation.confidence.level]}</b></div>${recommendation.explanations.slice(0, 2).map(text => `<p>${escapeHTML(text)}</p>`).join("")}<small>Motor v${recommendation.engineVersion} · ${recommendation.reasonCodes.map(code => escapeHTML(code)).join(" · ")}</small></div>` : "";
-    $("#planDetail").innerHTML = `<span class="eyebrow ${session.race ? "red" : ""}">${escapeHTML(dateLabel(session.date, true).toUpperCase())}</span><h2>${escapeHTML(session.type)}</h2><div class="stats"><span><b>${numberBR(session.distance)} km</b>distância</span><span><b>RPE ${escapeHTML(session.rpe)}</b>esforço</span><span><b>${escapeHTML(session.pace)}</b>ritmo</span></div><div class="detail-block"><span>OBJETIVO</span><p>${escapeHTML(session.objective)}</p></div><div class="detail-block"><span>COMO FAZER</span><p>${escapeHTML(session.details)}</p></div>${explanation}${session.race ? '<button class="button race-button full" data-open="raceResultModal">Registrar resultado</button>' : '<button class="button primary full" data-open="workoutModal">＋ Registrar este treino</button>'}`;
+    const adaptationActions = session.race ? "" : `<div class="recommendation-actions"><button class="button" type="button" data-substitute-session="${escapeHTML(session.id)}">Trocar treino</button><button class="button" type="button" data-miss-session="${escapeHTML(session.id)}">Não consigo neste dia</button></div>`;
+    $("#planDetail").innerHTML = `<span class="eyebrow ${session.race ? "red" : ""}">${escapeHTML(dateLabel(session.date, true).toUpperCase())}</span><h2>${escapeHTML(session.type)}</h2><div class="stats"><span><b>${numberBR(session.distance)} km</b>distância</span><span><b>RPE ${escapeHTML(session.rpe)}</b>esforço</span><span><b>${escapeHTML(session.pace)}</b>ritmo</span></div><div class="detail-block"><span>OBJETIVO</span><p>${escapeHTML(session.objective)}</p></div><div class="detail-block"><span>COMO FAZER</span><p>${escapeHTML(session.details)}</p></div>${explanation}${adaptationActions}${session.race ? '<button class="button race-button full" data-open="raceResultModal">Registrar resultado</button>' : '<button class="button primary full" data-open="workoutModal">＋ Registrar este treino</button>'}`;
   }
 
   function nutritionFor(session) {
@@ -702,6 +643,23 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
     form.elements.weeklyGoal.disabled = state.settings.adaptiveGoal;
     form.elements.theme.value = state.settings.theme;
     $("#preferencesModal").showModal();
+  }
+
+  function openSubstitution(session) {
+    substitutionSessionId = session.id;
+    const options = workoutSubstitutions(session);
+    $("#substitutionIntro").textContent = `${dateLabel(session.date, true)} · sugestão atual: ${session.type}.`;
+    $("#substitutionOptions").innerHTML = options.length ? options.map(option => `<button class="substitution-option" type="button" data-replacement-id="${escapeHTML(option.workoutId)}"><span><strong>${escapeHTML(option.name)}</strong><small>${escapeHTML(option.objective)}</small></span><b>RPE ${escapeHTML(option.rpe)}</b></button>`).join("") : '<div class="empty"><b>Sem troca equivalente</b><small>Você ainda pode marcar que não conseguiu treinar.</small></div>';
+    $("#substitutionModal").showModal();
+  }
+
+  function saveTrainingDecision(action, replacementWorkoutId = null) {
+    const session = adaptivePlan.find(item => item.id === substitutionSessionId);
+    if (!session) { showToast("A sessão mudou. Abra o plano e tente novamente."); return; }
+    state.recommendationFeedback.push(createTrainingDecision(session, action, replacementWorkoutId));
+    saveState(action === "missed" ? "Tudo bem. O treino não será acumulado nem cobrado depois." : "Treino trocado. O restante do plano foi preservado.");
+    $("#substitutionModal").close();
+    substitutionSessionId = null; selectedPlan = 0; renderAll();
   }
   function handlePhoto(file) {
     if (!file) return;
@@ -955,6 +913,12 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
         document.getElementById(id)?.showModal();
       }
       const planButton = event.target.closest("[data-plan-index]"); if (planButton) { selectedPlan = Number(planButton.dataset.planIndex); renderPlan(); }
+      const substituteButton = event.target.closest("[data-substitute-session]");
+      if (substituteButton) { const session = adaptivePlan.find(item => item.id === substituteButton.dataset.substituteSession); if (session) openSubstitution(session); }
+      const missButton = event.target.closest("[data-miss-session]");
+      if (missButton) { substitutionSessionId = missButton.dataset.missSession; saveTrainingDecision("missed"); }
+      const replacementButton = event.target.closest("[data-replacement-id]");
+      if (replacementButton) saveTrainingDecision("substituted", replacementButton.dataset.replacementId);
       const raceCard = event.target.closest("[data-race-history]"); if (raceCard) { selectedRaceHistory = raceCard.dataset.raceHistory; renderRaceHistory(); }
       const editButton = event.target.closest("[data-edit-workout]");
       if (editButton) { const workout = state.workouts.find(item => item.id === editButton.dataset.editWorkout); if (workout) openWorkoutForm(workout); }
@@ -1042,6 +1006,7 @@ import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace
     });
 
     $("#onboardingHasRace").addEventListener("change", event => { $("#onboardingRaceFields").hidden = !event.target.checked; });
+    $("#markWorkoutMissed").addEventListener("click", () => saveTrainingDecision("missed"));
     $("#onboardingBack").addEventListener("click", () => {
       state.onboarding.currentStep = Math.max(0, onboardingStep(state) - 1);
       saveState(); renderOnboarding();

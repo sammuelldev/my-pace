@@ -118,7 +118,7 @@
           <div class="plan-layout"><article class="panel plan-list"><div class="plan-summary"><div><strong id="planCurrentBase">3,0 km</strong><span>base atual</span></div><b>→</b><div><strong id="planTargetDistance">Evolução</strong><span id="planTargetLabel">próximas semanas</span></div></div><div id="planList"></div></article><aside class="panel plan-detail" id="planDetail"></aside></div>
         </section>
 
-        <section class="view" id="treinos"><div class="page-head"><div><span class="eyebrow">REGISTRO DE TREINOS</span><h1>Treinos</h1><p>Cada registro ajusta as métricas, o plano e a alimentação dos próximos dias.</p></div><button class="button primary" data-open="workoutModal">＋ Registrar treino</button></div><article class="panel info-strip"><span class="feature-icon">⌁</span><div><h3>Registro manual rápido</h3><p>Copie os dados do Strava. O pace é calculado automaticamente.</p></div></article><article class="panel"><div class="panel-head"><div><span class="eyebrow">RESUMO</span><h3>Treinos registrados</h3></div></div><div id="trainingList"></div></article></section>
+        <section class="view" id="treinos"><div class="page-head"><div><span class="eyebrow">REGISTRO DE TREINOS</span><h1>Treinos</h1><p>Cada registro ajusta as métricas, o plano e a alimentação dos próximos dias.</p></div><button class="button primary" data-open="workoutModal">＋ Registrar treino</button></div><article class="panel info-strip"><span class="feature-icon">⌁</span><div><h3>Registro manual rápido</h3><p>Copie os dados do Strava. O pace é calculado automaticamente.</p></div></article><article class="panel rpe-education"><div><span class="eyebrow">RPE · ESFORÇO PERCEBIDO</span><h3>O número descreve como o treino pesou para você</h3><p>Use a sessão inteira como referência, não apenas o trecho mais difícil.</p></div><div class="rpe-scale"><span><b>1–2</b>Muito leve</span><span><b>3–4</b>Confortável</span><span><b>5–6</b>Firme</span><span><b>7–8</b>Difícil</span><span><b>9–10</b>Máximo</span></div></article><article class="panel"><div class="panel-head"><div><span class="eyebrow">RESUMO</span><h3>Treinos registrados</h3></div></div><div id="trainingList"></div></article></section>
 
         <section class="view" id="desempenho"><div class="page-head"><div><span class="eyebrow">ANÁLISE</span><h1>Desempenho</h1><p>Evolução baseada nos registros reais, sem metas congeladas.</p></div></div><div class="metrics performance-metrics"></div><div class="two-columns lower"><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">PACE</span><h3>Evolução do ritmo</h3></div></div><div class="chart" id="performancePaceChart"></div></article><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">DISTÂNCIA</span><h3>Distância por corrida</h3></div></div><div class="chart" id="distanceChart"></div></article></div></section>
 
@@ -169,6 +169,16 @@
       <label>Tema<select name="theme"><option value="system">Usar tema do dispositivo</option><option value="dark">Escuro</option><option value="light">Claro</option></select></label>
       <button class="button primary full" type="submit">Salvar preferências</button>
     </form>
+  </dialog>
+
+  <dialog class="modal" id="substitutionModal">
+    <div class="modal-card substitution-card">
+      <button class="modal-close" type="button" data-close aria-label="Fechar">&times;</button>
+      <span class="eyebrow">O PLANO CABE NA VIDA REAL</span><h2>O que funciona melhor hoje?</h2><p class="muted" id="substitutionIntro">Escolha uma opção equivalente ou marque que não conseguiu treinar.</p>
+      <div id="substitutionOptions" class="substitution-options"></div>
+      <button class="button full" type="button" id="markWorkoutMissed">Hoje não consigo treinar</button>
+      <small class="modal-footnote">O MyPace não acumula nem dobra o próximo treino para compensar.</small>
+    </div>
   </dialog>
 
   <dialog class="modal onboarding-modal" id="onboardingModal">
