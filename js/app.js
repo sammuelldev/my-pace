@@ -23,6 +23,7 @@ import {
 } from "./core/schema.js";
 import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocalState, userStorageKey } from "./core/storage.js";
 import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingInitialValues, onboardingStep } from "./domains/onboarding.js";
+import { buildAthleteModel, explainTrainingRecommendation } from "./domains/pace-engine.js";
 
 (() => {
   "use strict";
@@ -213,17 +214,16 @@ import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingIn
   }
 
   function athleteProfile() {
-    const runs = performanceRuns().slice(-6);
-    const baseDistance = runs.length ? runs.reduce((sum, run) => sum + run.distance, 0) / runs.length : 3;
-    const longest = runs.length ? Math.max(3, ...runs.map(run => run.distance)) : 3;
-    const avgPace = runs.length ? runs.reduce((sum, run) => sum + paceSeconds(run), 0) / runs.length : 320;
-    const recent = runs.slice(-3);
-    const earlier = runs.slice(-6, -3);
-    const recentPace = recent.length ? recent.reduce((sum, run) => sum + paceSeconds(run), 0) / recent.length : avgPace;
-    const earlierPace = earlier.length ? earlier.reduce((sum, run) => sum + paceSeconds(run), 0) / earlier.length : recentPace;
-    const improvement = earlierPace ? (earlierPace - recentPace) / earlierPace * 100 : 0;
-    const weeklyGoal = round(clamp(baseDistance * 4.1, 8, 60));
-    return { baseDistance: round(baseDistance), longest, avgPace: recentPace, improvement, weeklyGoal };
+    const model = buildAthleteModel(state);
+    return {
+      baseDistance: model.capabilities.baseDistanceKm,
+      longest: model.capabilities.longestRunKm,
+      avgPace: model.capabilities.typicalPaceSeconds,
+      improvement: model.observed.trend.percent,
+      weeklyGoal: model.capabilities.weeklyGoalKm,
+      confidence: model.confidence,
+      model
+    };
   }
 
   function buildAdaptivePlan() {
@@ -287,7 +287,7 @@ import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingIn
       }
       cursor = addDays(cursor, 1);
     }
-    return sessions;
+    return sessions.map(session => explainTrainingRecommendation(session, state, profile.model));
   }
 
   function weeklyWorkouts() {
@@ -528,7 +528,10 @@ import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingIn
   function renderPlanDetail() {
     const session = adaptivePlan[selectedPlan];
     if (!session) { $("#planDetail").innerHTML = '<div class="empty"><b>Plano sendo preparado</b></div>'; return; }
-    $("#planDetail").innerHTML = `<span class="eyebrow ${session.race ? "red" : ""}">${escapeHTML(dateLabel(session.date, true).toUpperCase())}</span><h2>${escapeHTML(session.type)}</h2><div class="stats"><span><b>${numberBR(session.distance)} km</b>distância</span><span><b>RPE ${escapeHTML(session.rpe)}</b>esforço</span><span><b>${escapeHTML(session.pace)}</b>ritmo</span></div><div class="detail-block"><span>OBJETIVO</span><p>${escapeHTML(session.objective)}</p></div><div class="detail-block"><span>COMO FAZER</span><p>${escapeHTML(session.details)}</p></div>${session.race ? '<button class="button race-button full" data-open="raceResultModal">Registrar resultado</button>' : '<button class="button primary full" data-open="workoutModal">＋ Registrar este treino</button>'}`;
+    const recommendation = session.recommendation;
+    const confidenceNames = { low: "baixa", moderate: "moderada", high: "alta" };
+    const explanation = recommendation ? `<div class="recommendation-why"><div><span>POR QUE AGORA</span><b class="confidence ${escapeHTML(recommendation.confidence.level)}">Confiança ${confidenceNames[recommendation.confidence.level]}</b></div>${recommendation.explanations.slice(0, 2).map(text => `<p>${escapeHTML(text)}</p>`).join("")}<small>Motor v${recommendation.engineVersion} · ${recommendation.reasonCodes.map(code => escapeHTML(code)).join(" · ")}</small></div>` : "";
+    $("#planDetail").innerHTML = `<span class="eyebrow ${session.race ? "red" : ""}">${escapeHTML(dateLabel(session.date, true).toUpperCase())}</span><h2>${escapeHTML(session.type)}</h2><div class="stats"><span><b>${numberBR(session.distance)} km</b>distância</span><span><b>RPE ${escapeHTML(session.rpe)}</b>esforço</span><span><b>${escapeHTML(session.pace)}</b>ritmo</span></div><div class="detail-block"><span>OBJETIVO</span><p>${escapeHTML(session.objective)}</p></div><div class="detail-block"><span>COMO FAZER</span><p>${escapeHTML(session.details)}</p></div>${explanation}${session.race ? '<button class="button race-button full" data-open="raceResultModal">Registrar resultado</button>' : '<button class="button primary full" data-open="workoutModal">＋ Registrar este treino</button>'}`;
   }
 
   function nutritionFor(session) {
