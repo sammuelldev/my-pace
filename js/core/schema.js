@@ -82,10 +82,15 @@ export function normalizeWeight(item) {
 }
 
 export function normalizeEquipment(item) {
+  const photoValue = typeof item?.photo === "string" ? item.photo.trim() : "";
+  const photo = photoValue.length <= 700000 && (
+    /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoValue)
+    || /^https:\/\//i.test(photoValue)
+  ) ? photoValue : null;
   return {
     id: cleanString(item?.id, 100) || stableId("equipment", item), name: cleanString(item?.name, 80),
     type: cleanString(item?.type || "Treino", 30), lifespan: clamp(Number(item?.lifespan) || 600, 100, 2000),
-    totalKm: Math.max(0, Number(item?.totalKm) || 0), planned: Boolean(item?.planned), retired: Boolean(item?.retired),
+    photo, totalKm: Math.max(0, Number(item?.totalKm) || 0), planned: Boolean(item?.planned), retired: Boolean(item?.retired),
     updatedAt: stableTimestamp(item)
   };
 }

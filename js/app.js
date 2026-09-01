@@ -44,6 +44,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   let selectedPlan = 0;
   let selectedRaceHistory = null;
   let pendingPhoto = state.profile.photo;
+  let pendingEquipmentPhoto = null;
+  let equipmentPhotoTargetId = null;
   let toastTimer;
   let cloudUser = null;
   let cloudUnsubscribe = null;
@@ -555,7 +557,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   }
 
   function renderEquipment() {
-    $("#equipmentList").innerHTML = state.equipment.length ? state.equipment.map(shoe => { const km = shoeDistance(shoe); const progress = clamp(km / shoe.lifespan * 100, 0, 100); return `<article class="shoe-card"><div class="shoe-top"><span class="shoe-symbol">⌁</span><span class="chip">${escapeHTML(shoe.type || "Equipamento")}</span></div><h2>${escapeHTML(shoe.name)}</h2><p>Quilometragem atualizada pelos registros.</p><div class="progress"><i style="width:${progress}%"></i></div><div class="shoe-stats"><span>${numberBR(km)} km usados</span><span>${numberBR(shoe.lifespan)} km estimados</span></div></article>`; }).join("") : '<article class="panel empty"><b>Nenhum equipamento adicionado</b><small>Adicione um modelo para acompanhar o uso e a quilometragem.</small></article>';
+    $("#equipmentList").innerHTML = state.equipment.length ? state.equipment.map(shoe => { const km = shoeDistance(shoe); const progress = clamp(km / shoe.lifespan * 100, 0, 100); const media = shoe.photo ? `<img src="${escapeHTML(shoe.photo)}" alt="Foto de ${escapeHTML(shoe.name)}" loading="lazy" decoding="async">` : '<span class="shoe-symbol" aria-hidden="true">◫</span>'; return `<article class="shoe-card"><div class="shoe-media">${media}</div><div class="shoe-card-content"><h2>${escapeHTML(shoe.name)}</h2><p>Quilometragem atualizada pelos registros.</p><button class="text-button equipment-photo-action" type="button" data-equipment-photo="${escapeHTML(shoe.id)}">${shoe.photo ? "Trocar foto" : "Adicionar foto"}</button><div class="progress"><i style="width:${progress}%"></i></div><div class="shoe-stats"><span>${numberBR(km)} km usados</span><span>${numberBR(shoe.lifespan)} km estimados</span></div></div></article>`; }).join("") : '<article class="panel empty"><b>Nenhum equipamento adicionado</b><small>Adicione um modelo para acompanhar o uso e a quilometragem.</small></article>';
     const options = '<option value="">Não informar</option>' + state.equipment.filter(shoe => !shoe.retired).map(shoe => `<option value="${escapeHTML(shoe.id)}">${escapeHTML(shoe.name)}</option>`).join("");
     $("#workoutShoe").innerHTML = options;
     const raceShoe = $("#raceShoe"); if (raceShoe) raceShoe.innerHTML = options;
@@ -736,12 +738,42 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     $("#substitutionModal").close();
     substitutionSessionId = null; selectedPlan = 0; renderAll();
   }
-  function handlePhoto(file) {
+  function compressPhoto(file, width, height, maxBytes, quality, onReady) {
     if (!file) return;
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { showToast("Escolha uma foto JPG, PNG ou WebP."); return; }
-    if (file.size > 8 * 1024 * 1024) { showToast("A foto precisa ter no máximo 8 MB."); return; }
+    if (file.size > maxBytes) { showToast(`A foto precisa ter no máximo ${Math.round(maxBytes / 1024 / 1024)} MB.`); return; }
     const reader = new FileReader();
-    reader.onload = event => { const image = new Image(); image.onload = () => { const size = Math.min(image.width, image.height), sx = (image.width - size) / 2, sy = (image.height - size) / 2; const canvas = document.createElement("canvas"); canvas.width = 420; canvas.height = 420; const context = canvas.getContext("2d"); context.drawImage(image, sx, sy, size, size, 0, 0, 420, 420); pendingPhoto = canvas.toDataURL("image/jpeg", 0.78); applyAvatar(pendingPhoto, $("#profileNameInput").value || state.profile.name); showToast("Foto pronta. Clique em Salvar perfil."); }; image.onerror = () => showToast("Não foi possível ler essa imagem."); image.src = event.target.result; }; reader.readAsDataURL(file);
+    reader.onload = event => { const image = new Image(); image.onload = () => { const sourceRatio = image.width / image.height, targetRatio = width / height; let sx = 0, sy = 0, sw = image.width, sh = image.height; if (sourceRatio > targetRatio) { sw = image.height * targetRatio; sx = (image.width - sw) / 2; } else { sh = image.width / targetRatio; sy = (image.height - sh) / 2; } const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height; const context = canvas.getContext("2d"); context.drawImage(image, sx, sy, sw, sh, 0, 0, width, height); onReady(canvas.toDataURL("image/jpeg", quality)); }; image.onerror = () => showToast("Não foi possível ler essa imagem."); image.src = event.target.result; }; reader.readAsDataURL(file);
+  }
+
+  function handlePhoto(file) {
+    compressPhoto(file, 420, 420, 8 * 1024 * 1024, 0.78, photo => { pendingPhoto = photo; applyAvatar(pendingPhoto, $("#profileNameInput").value || state.profile.name); showToast("Foto pronta. Clique em Salvar perfil."); });
+  }
+
+  function applyEquipmentPhoto(photo = pendingEquipmentPhoto) {
+    const preview = $("#equipmentPhotoPreview");
+    preview.hidden = !photo;
+    preview.src = photo || "";
+    $("#equipmentPhotoEmpty").hidden = Boolean(photo);
+    $("#removeEquipmentPhoto").hidden = !photo;
+  }
+
+  function handleEquipmentPhoto(file, onReady = null) {
+    compressPhoto(file, 640, 426, 12 * 1024 * 1024, 0.76, photo => {
+      if (onReady) { onReady(photo); return; }
+      pendingEquipmentPhoto = photo;
+      applyEquipmentPhoto();
+      showToast("Foto pronta para salvar com o equipamento.");
+    });
+  }
+
+  function openEquipmentForm() {
+    const form = $("#shoeForm");
+    form.reset();
+    $("#equipmentPhotoInput").value = "";
+    pendingEquipmentPhoto = null;
+    applyEquipmentPhoto();
+    $("#shoeModal").showModal();
   }
 
   function openRaceForm(edit = false) {
@@ -982,6 +1014,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
         if (id === "nextRaceModal") { openRaceForm(); return; }
         if (id === "raceResultModal") { if (prepareRaceResult()) $("#raceResultModal").showModal(); return; }
         if (id === "workoutModal") { openWorkoutForm(); return; }
+        if (id === "shoeModal") { openEquipmentForm(); return; }
         if (id === "readinessModal") {
           const current = state.readiness[localISO()];
           const form = $("#readinessForm");
@@ -1002,6 +1035,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       const nutritionSwap = event.target.closest("[data-nutrition-swap]");
       if (nutritionSwap) swapNutritionOption(nutritionSwap.dataset.nutritionDate, nutritionSwap.dataset.nutritionSwap);
       const raceCard = event.target.closest("[data-race-history]"); if (raceCard) { selectedRaceHistory = raceCard.dataset.raceHistory; renderRaceHistory(); }
+      const equipmentPhotoButton = event.target.closest("[data-equipment-photo]");
+      if (equipmentPhotoButton) { equipmentPhotoTargetId = equipmentPhotoButton.dataset.equipmentPhoto; $("#equipmentQuickPhotoInput").value = ""; $("#equipmentQuickPhotoInput").click(); }
       const editButton = event.target.closest("[data-edit-workout]");
       if (editButton) { const workout = state.workouts.find(item => item.id === editButton.dataset.editWorkout); if (workout) openWorkoutForm(workout); }
       const deleteButton = event.target.closest("[data-delete-workout]");
@@ -1028,6 +1063,9 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     $("#deleteAccountButton").addEventListener("click", () => { $("#deleteAccountForm").reset(); $("#deleteAccountMessage").textContent = ""; $("#deleteAccountModal").showModal(); });
     $("#choosePhoto").addEventListener("click", () => $("#profilePhotoInput").click()); $("#changePhoto").addEventListener("click", () => $("#profilePhotoInput").click());
     $("#profilePhotoInput").addEventListener("change", event => handlePhoto(event.target.files[0])); $("#profileNameInput").addEventListener("input", event => applyAvatar(pendingPhoto, event.target.value)); $("#removePhoto").addEventListener("click", () => { pendingPhoto = null; applyAvatar(null, $("#profileNameInput").value); });
+    $("#equipmentPhotoPicker").addEventListener("click", () => $("#equipmentPhotoInput").click()); $("#changeEquipmentPhoto").addEventListener("click", () => $("#equipmentPhotoInput").click());
+    $("#equipmentPhotoInput").addEventListener("change", event => { handleEquipmentPhoto(event.target.files[0]); event.target.value = ""; }); $("#removeEquipmentPhoto").addEventListener("click", () => { pendingEquipmentPhoto = null; applyEquipmentPhoto(); });
+    $("#equipmentQuickPhotoInput").addEventListener("change", event => { const file = event.target.files[0], targetId = equipmentPhotoTargetId; equipmentPhotoTargetId = null; if (!file || !targetId) return; handleEquipmentPhoto(file, photo => { state.equipment = state.equipment.map(item => item.id === targetId ? normalizeEquipment({ ...item, photo, updatedAt: new Date().toISOString() }) : item); saveState("Foto do equipamento atualizada."); renderEquipment(); }); });
     $("#historySearch").addEventListener("input", renderHistory); $("#historyType").addEventListener("change", renderHistory); $("#historyPeriod").addEventListener("change", renderHistory); $("#raceHistorySelect").addEventListener("change", event => { selectedRaceHistory = event.target.value; renderRaceHistory(); });
     $("#settingsPreferences").addEventListener("click", openPreferences);
     $("#themeToggle").addEventListener("click", () => { state.settings.theme = resolvedTheme() === "dark" ? "light" : "dark"; saveState(); renderPreferences(); });
@@ -1068,7 +1106,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       selectedRaceHistory = race.id; saveState("Resultado oficial salvo no histórico de provas."); $("#raceResultModal").close(); renderAll(); navigate("historico");
     });
 
-    $("#shoeForm").addEventListener("submit", event => { event.preventDefault(); const form = new FormData(event.currentTarget); state.equipment.push(normalizeEquipment({ id: uid(), name: form.get("name"), type: form.get("type"), lifespan: form.get("lifespan"), totalKm: 0 })); saveState("Equipamento adicionado."); event.currentTarget.reset(); $("#shoeModal").close(); renderEquipment(); });
+    $("#shoeForm").addEventListener("submit", event => { event.preventDefault(); const form = new FormData(event.currentTarget); state.equipment.push(normalizeEquipment({ id: uid(), name: form.get("name"), type: form.get("type"), lifespan: form.get("lifespan"), photo: pendingEquipmentPhoto, totalKm: 0 })); pendingEquipmentPhoto = null; saveState("Equipamento adicionado."); event.currentTarget.reset(); applyEquipmentPhoto(); $("#shoeModal").close(); renderEquipment(); });
     $("#weightForm").addEventListener("submit", event => { event.preventDefault(); const weight = Number($("#weightInput").value); if (weight < 30 || weight > 250) { showToast("Digite um peso entre 30 e 250 kg."); return; } state.weights.push({ id: uid(), date: localISO(), weight }); saveState("Peso registrado. Alimentação atualizada."); renderAll(); });
     $("#journalForm").addEventListener("submit", event => {
       event.preventDefault(); const form = new FormData(event.currentTarget); const note = String(form.get("note") || "").trim();

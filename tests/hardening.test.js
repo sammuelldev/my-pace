@@ -32,6 +32,16 @@ test("onboarding limita o diálogo ao viewport e ocupa a tela no celular", () =>
   assert.match(css, /\.onboarding-step\{[^}]*overflow-y:auto/);
 });
 
+test("equipamentos aceitam foto sem exibir balão de tipo", () => {
+  const html = readFileSync("index.html", "utf8");
+  const app = readFileSync("js/app.js", "utf8");
+  const equipmentRenderer = app.slice(app.indexOf("function renderEquipment"), app.indexOf("function renderWeight"));
+  assert.match(html, /id="equipmentPhotoInput"[^>]*accept="image\/jpeg,image\/png,image\/webp"/);
+  assert.match(equipmentRenderer, /shoe\.photo/);
+  assert.match(equipmentRenderer, /data-equipment-photo/);
+  assert.doesNotMatch(equipmentRenderer, /class="chip"/);
+});
+
 test("service worker referencia apenas arquivos existentes do app shell", () => {
   const worker = readFileSync("service-worker.js", "utf8");
   const shellBlock = worker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || "";

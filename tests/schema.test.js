@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LEGACY_BACKUP_KEY, SCHEMA_VERSION, STORAGE_KEY, normalizeState } from "../js/core/schema.js";
+import { LEGACY_BACKUP_KEY, SCHEMA_VERSION, STORAGE_KEY, normalizeEquipment, normalizeState } from "../js/core/schema.js";
 import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, userStorageKey } from "../js/core/storage.js";
 
 const fixedNow = new Date("2026-09-01T12:00:00.000Z");
@@ -34,6 +34,12 @@ test("normalização do schema v4 é idempotente", () => {
   const once = normalizeState(legacyState(), fixedNow);
   const twice = normalizeState(once, fixedNow);
   assert.deepEqual(twice, once);
+});
+
+test("foto de equipamento aceita imagens seguras e rejeita valores inválidos", () => {
+  const validPhoto = "data:image/jpeg;base64,ZmFrZQ==";
+  assert.equal(normalizeEquipment({ name: "Tênis", photo: validPhoto }).photo, validPhoto);
+  assert.equal(normalizeEquipment({ name: "Tênis", photo: "javascript:alert(1)" }).photo, null);
 });
 
 test("primeira leitura cria um backup do payload legado", () => {
