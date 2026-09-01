@@ -147,6 +147,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   function applyTheme() {
     const theme = resolvedTheme();
     document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.accent = state.settings.accent || "blue";
     document.documentElement.style.colorScheme = theme;
     const themeColor = $("meta[name=theme-color]");
     if (themeColor) themeColor.content = theme === "light" ? "#f4f7fb" : "#080b12";
@@ -174,6 +175,13 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     desktopSync.id = "desktopSync";
     desktopSync.innerHTML = '<i></i><span>Salvo neste dispositivo</span>';
     $(".sidebar-bottom")?.prepend(desktopSync);
+
+    const sidebarScrim = document.createElement("button");
+    sidebarScrim.className = "sidebar-scrim";
+    sidebarScrim.type = "button";
+    sidebarScrim.hidden = true;
+    sidebarScrim.setAttribute("aria-label", "Fechar menu");
+    $("#sidebar")?.insertAdjacentElement("afterend", sidebarScrim);
 
     const readiness = document.createElement("article");
     readiness.className = "readiness-card panel";
@@ -254,11 +262,18 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     return { runs, totalKm, longest, best3k: runs3k.length ? Math.min(...runs3k.map(run => run.durationSeconds)) : null, best5k: runs5k.length ? Math.min(...runs5k.map(run => run.durationSeconds)) : null };
   }
 
-  function navigate(view) {
+  function navigate(view, updateUrl = true) {
+    if (!document.getElementById(view)?.classList.contains("view")) return;
     $$(".view").forEach(section => section.classList.toggle("active", section.id === view));
-    $$('[data-view]').forEach(button => button.classList.toggle("active", button.dataset.view === view));
+    $$('[data-view]').forEach(button => {
+      const active = button.dataset.view === view;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+    });
     $("#sidebar").classList.remove("open");
+    const scrim = $(".sidebar-scrim"); if (scrim) scrim.hidden = true;
     $("#menuButton")?.setAttribute("aria-expanded", "false");
+    if (updateUrl && window.location.hash !== `#${view}`) history.pushState({ view }, "", `#${view}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
     const heading = $(`#${view} h1`); if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
   }
@@ -423,8 +438,9 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     applyTheme();
     const goal = effectiveWeeklyGoal();
     const themeNames = { system: "tema do sistema", dark: "tema escuro", light: "tema claro" };
+    const accentNames = { blue: "azul", violet: "violeta", green: "verde", orange: "laranja" };
     const summary = $("#preferencesSummary");
-    if (summary) summary.textContent = `${state.settings.adaptiveGoal ? "Meta adaptativa" : `${numberBR(goal)} km/semana`} · ${themeNames[state.settings.theme]}`;
+    if (summary) summary.textContent = `${state.settings.adaptiveGoal ? "Meta adaptativa" : `${numberBR(goal)} km/semana`} · ${themeNames[state.settings.theme]} · ${accentNames[state.settings.accent]}`;
     const trainingDaysSummary = $("#trainingDaysSummary");
     if (trainingDaysSummary) {
       const names = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -573,14 +589,14 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     const area = `${px},${height - py} ${points} ${x(data.length - 1)},${height - py}`;
     const grids = [0, 1, 2, 3].map(step => { const gy = py + step * ((height - py * 2) / 3); const value = lowerBetter ? min + step * ((max - min) / 3) : max - step * ((max - min) / 3); return `<line class="grid" x1="${px}" y1="${gy}" x2="${width - px}" y2="${gy}"/><text x="3" y="${gy + 4}">${escapeHTML(formatter(value))}</text>`; }).join("");
     const dots = data.map((item, index) => `<circle class="point" style="stroke:${accent}" cx="${x(index)}" cy="${y(valueOf(item))}" r="4"><title>${escapeHTML(dateLabel(item.date))}: ${escapeHTML(formatter(valueOf(item)))}</title></circle>`).join("");
-    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img"><defs><linearGradient id="gradient-${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${accent}" stop-opacity=".32"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></linearGradient></defs>${grids}<polygon points="${area}" fill="url(#gradient-${id})"/><polyline class="line" style="stroke:${accent}" points="${points}"/>${dots}</svg>`;
+    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de evolução com ${data.length} registros"><title>Evolução baseada nos registros selecionados</title><defs><linearGradient id="gradient-${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${accent}" stop-opacity=".32"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></linearGradient></defs>${grids}<polygon points="${area}" fill="url(#gradient-${id})"/><polyline class="line" style="stroke:${accent}" points="${points}"/>${dots}</svg>`;
   }
 
   function barChart(container, data, accent = "#4d8dff") {
     if (!data.length) { container.innerHTML = '<div class="empty"><b>Gráfico aguardando treinos</b></div>'; return; }
     const width = 620, height = 230, px = 38, py = 28, max = Math.max(1, ...data.map(item => item.distance));
     const slot = (width - px * 2) / data.length, barWidth = Math.max(7, slot - 9);
-    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img">${[0, 1, 2, 3].map(step => { const gy = py + step * ((height - py * 2) / 3); return `<line class="grid" x1="${px}" y1="${gy}" x2="${width - px}" y2="${gy}"/>`; }).join("")}${data.map((item, index) => { const h = item.distance / max * (height - py * 2); return `<rect class="bar" style="fill:${accent}" x="${px + index * slot + 4}" y="${height - py - h}" width="${barWidth}" height="${h}" rx="4"><title>${escapeHTML(dateLabel(item.date))}: ${numberBR(item.distance, 2)} km</title></rect>`; }).join("")}</svg>`;
+    container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de distância com ${data.length} registros"><title>Distância por corrida</title>${[0, 1, 2, 3].map(step => { const gy = py + step * ((height - py * 2) / 3); return `<line class="grid" x1="${px}" y1="${gy}" x2="${width - px}" y2="${gy}"/>`; }).join("")}${data.map((item, index) => { const h = item.distance / max * (height - py * 2); return `<rect class="bar" style="fill:${accent}" x="${px + index * slot + 4}" y="${height - py - h}" width="${barWidth}" height="${h}" rx="4"><title>${escapeHTML(dateLabel(item.date))}: ${numberBR(item.distance, 2)} km</title></rect>`; }).join("")}</svg>`;
   }
 
   function renderCharts() {
@@ -697,6 +713,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     form.elements.weeklyGoal.value = state.settings.weeklyGoal;
     form.elements.weeklyGoal.disabled = state.settings.adaptiveGoal;
     form.elements.theme.value = state.settings.theme;
+    form.elements.accent.value = state.settings.accent;
     $("#preferencesModal").showModal();
   }
 
@@ -861,6 +878,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     $("#productApp").hidden = false;
     document.body.classList.add("authenticated");
     renderAll();
+    const requestedView = window.location.hash.slice(1);
+    navigate(document.getElementById(requestedView)?.classList.contains("view") ? requestedView : "inicio", false);
     setTimeout(openOnboardingIfNeeded, 0);
   }
 
@@ -997,8 +1016,9 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       const closeButton = event.target.closest("[data-close]"); if (closeButton) closeButton.closest("dialog")?.close();
     });
 
-    $("#menuButton").addEventListener("click", event => { const open = $("#sidebar").classList.toggle("open"); event.currentTarget.setAttribute("aria-expanded", String(open)); });
-    $("#mobileMore").addEventListener("click", () => $("#sidebar").classList.add("open"));
+    $("#menuButton").addEventListener("click", event => { const open = $("#sidebar").classList.toggle("open"); event.currentTarget.setAttribute("aria-expanded", String(open)); $(".sidebar-scrim").hidden = !open; });
+    $("#mobileMore").addEventListener("click", () => { $("#sidebar").classList.add("open"); $("#menuButton").setAttribute("aria-expanded", "true"); $(".sidebar-scrim").hidden = false; });
+    $(".sidebar-scrim").addEventListener("click", () => { $("#sidebar").classList.remove("open"); $("#menuButton").setAttribute("aria-expanded", "false"); $(".sidebar-scrim").hidden = true; });
     $("#openProfile").addEventListener("click", openProfileModal); $("#settingsProfile").addEventListener("click", openProfileModal);
     $("#choosePhoto").addEventListener("click", () => $("#profilePhotoInput").click()); $("#changePhoto").addEventListener("click", () => $("#profilePhotoInput").click());
     $("#profilePhotoInput").addEventListener("change", event => handlePhoto(event.target.files[0])); $("#profileNameInput").addEventListener("input", event => applyAvatar(pendingPhoto, event.target.value)); $("#removePhoto").addEventListener("click", () => { pendingPhoto = null; applyAvatar(null, $("#profileNameInput").value); });
@@ -1067,6 +1087,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       state.settings.adaptiveGoal = form.get("adaptiveGoal") === "on";
       state.settings.weeklyGoal = clamp(Number(form.get("weeklyGoal")) || 10, 3, 200);
       state.settings.theme = ["system", "dark", "light"].includes(form.get("theme")) ? form.get("theme") : "system";
+      state.settings.accent = ["blue", "violet", "green", "orange"].includes(form.get("accent")) ? form.get("accent") : "blue";
       saveState("Preferências atualizadas.");
       $("#preferencesModal").close();
       renderAll();
@@ -1152,4 +1173,9 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   renderAll();
   startCloud();
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (state.settings.theme === "system") applyTheme(); });
+  window.addEventListener("popstate", () => { if (cloudUser) navigate(window.location.hash.slice(1) || "inicio", false); });
+  window.addEventListener("hashchange", () => { if (cloudUser) navigate(window.location.hash.slice(1) || "inicio", false); });
+  window.addEventListener("offline", () => { setCloudUI("error", "Sem conexão. Alterações continuam salvas neste dispositivo."); showToast("Você está offline. O MyPace continuará salvando neste dispositivo."); });
+  window.addEventListener("online", () => { if (cloudUser) { showToast("Conexão restabelecida. Sincronizando alterações…"); scheduleCloudSave(); } });
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("./service-worker.js").catch(() => {});
 })();

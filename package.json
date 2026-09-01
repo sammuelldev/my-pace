@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-site.ps1",
     "test": "node --test"
   }
 }

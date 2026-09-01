@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#080b12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="Painel pessoal e adaptativo de corrida, desempenho, provas e evolução.">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="pt_BR">
@@ -16,6 +18,7 @@
   <meta name="twitter:image" content="assets/og-pace.png">
   <title>Pace — Central de Performance</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/styles.css">
   <script src="js/app.js" type="module"></script>
 </head>
@@ -167,6 +170,7 @@
       <label class="toggle-row"><span><strong>Meta adaptativa</strong><small>O Pace calcula o volume usando seus registros recentes.</small></span><input name="adaptiveGoal" type="checkbox" checked></label>
       <label>Meta semanal manual (km)<input name="weeklyGoal" type="number" min="3" max="200" step="0.5" value="10"><small>Usada somente quando a meta adaptativa estiver desligada.</small></label>
       <label>Tema<select name="theme"><option value="system">Usar tema do dispositivo</option><option value="dark">Escuro</option><option value="light">Claro</option></select></label>
+      <label>Cor de destaque<select name="accent"><option value="blue">Azul elétrico</option><option value="violet">Violeta</option><option value="green">Verde</option><option value="orange">Laranja</option></select></label>
       <button class="button primary full" type="submit">Salvar preferências</button>
     </form>
   </dialog>
