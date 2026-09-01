@@ -1,0 +1,22 @@
+export const NUTRITION_LIBRARY_VERSION = 1;
+
+export const NUTRITION_LIBRARY = [
+  { id: "banana-tapioca", name: "Tapioca com banana e canela", contexts: ["before", "regular"], patterns: ["omnivore", "vegetarian", "vegan", "pescatarian"], ingredients: ["tapioca", "banana", "canela"], allergens: [], budget: "low", prep: "low", tags: ["carbohydrate", "gluten-free", "lactose-free"] },
+  { id: "bread-banana", name: "Pão com banana e mel", contexts: ["before"], patterns: ["omnivore", "vegetarian", "pescatarian"], ingredients: ["pão", "banana", "mel"], allergens: ["gluten"], budget: "low", prep: "low", tags: ["carbohydrate", "lactose-free"] },
+  { id: "couscous-eggs", name: "Cuscuz com ovos", contexts: ["before", "after", "regular"], patterns: ["omnivore", "vegetarian", "pescatarian"], ingredients: ["cuscuz", "ovos"], allergens: ["egg"], budget: "low", prep: "medium", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "couscous-chicken", name: "Cuscuz com frango desfiado", contexts: ["after", "regular"], patterns: ["omnivore"], ingredients: ["cuscuz", "frango"], allergens: [], budget: "low", prep: "medium", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "rice-beans-chicken", name: "Arroz, feijão, frango e legumes", contexts: ["after", "regular"], patterns: ["omnivore"], ingredients: ["arroz", "feijão", "frango", "legumes"], allergens: [], budget: "low", prep: "medium", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "rice-beans-eggs", name: "Arroz, feijão, ovos e salada", contexts: ["after", "regular"], patterns: ["omnivore", "vegetarian", "pescatarian"], ingredients: ["arroz", "feijão", "ovos", "salada"], allergens: ["egg"], budget: "low", prep: "medium", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "rice-beans-tofu", name: "Arroz, feijão, tofu e legumes", contexts: ["after", "regular"], patterns: ["omnivore", "vegetarian", "vegan", "pescatarian"], ingredients: ["arroz", "feijão", "tofu", "legumes"], allergens: ["soy"], budget: "medium", prep: "medium", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "potato-chicken", name: "Batata, frango e legumes", contexts: ["after", "regular"], patterns: ["omnivore"], ingredients: ["batata", "frango", "legumes"], allergens: [], budget: "medium", prep: "medium", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "pasta-tomato", name: "Macarrão com molho de tomate e lentilha", contexts: ["after", "regular"], patterns: ["omnivore", "vegetarian", "vegan", "pescatarian"], ingredients: ["macarrão", "tomate", "lentilha"], allergens: ["gluten"], budget: "low", prep: "medium", tags: ["carbohydrate", "protein", "lactose-free"] },
+  { id: "yogurt-fruit-oats", name: "Iogurte, fruta e aveia", contexts: ["before", "after", "regular"], patterns: ["omnivore", "vegetarian", "pescatarian"], ingredients: ["iogurte", "fruta", "aveia"], allergens: ["milk", "gluten"], budget: "medium", prep: "low", tags: ["carbohydrate", "protein"] },
+  { id: "banana-milk-smoothie", name: "Vitamina de banana com leite e aveia", contexts: ["after", "regular"], patterns: ["omnivore", "vegetarian", "pescatarian"], ingredients: ["banana", "leite", "aveia"], allergens: ["milk", "gluten"], budget: "low", prep: "low", tags: ["carbohydrate", "protein"] },
+  { id: "banana-soy-smoothie", name: "Vitamina de banana com bebida de soja", contexts: ["after", "regular"], patterns: ["omnivore", "vegetarian", "vegan", "pescatarian"], ingredients: ["banana", "bebida de soja", "aveia sem glúten"], allergens: ["soy"], budget: "medium", prep: "low", tags: ["carbohydrate", "protein", "gluten-free", "lactose-free"] },
+  { id: "fruit-oats", name: "Banana com aveia e sementes", contexts: ["before", "regular"], patterns: ["omnivore", "vegetarian", "vegan", "pescatarian"], ingredients: ["banana", "aveia", "sementes"], allergens: ["gluten"], budget: "low", prep: "low", tags: ["carbohydrate", "lactose-free"] },
+  { id: "fruit-simple", name: "Fruta habitual e água", contexts: ["before", "regular"], patterns: ["omnivore", "vegetarian", "vegan", "pescatarian"], ingredients: ["fruta", "água"], allergens: [], budget: "low", prep: "low", tags: ["carbohydrate", "gluten-free", "lactose-free"] }
+];
+
+export function nutritionItemById(id) {
+  return NUTRITION_LIBRARY.find(item => item.id === id) || null;
+}

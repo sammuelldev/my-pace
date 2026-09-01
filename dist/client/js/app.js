@@ -25,6 +25,7 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
 import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingInitialValues, onboardingStep } from "./domains/onboarding.js";
 import { buildAthleteModel } from "./domains/pace-engine.js";
 import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitutions } from "./domains/training-engine.js";
+import { createNutritionFeedback, nutritionRecommendations } from "./domains/nutrition-engine.js";
 
 (() => {
   "use strict";
@@ -475,31 +476,38 @@ import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitution
     $("#planDetail").innerHTML = `<span class="eyebrow ${session.race ? "red" : ""}">${escapeHTML(dateLabel(session.date, true).toUpperCase())}</span><h2>${escapeHTML(session.type)}</h2><div class="stats"><span><b>${numberBR(session.distance)} km</b>distância</span><span><b>RPE ${escapeHTML(session.rpe)}</b>esforço</span><span><b>${escapeHTML(session.pace)}</b>ritmo</span></div><div class="detail-block"><span>OBJETIVO</span><p>${escapeHTML(session.objective)}</p></div><div class="detail-block"><span>COMO FAZER</span><p>${escapeHTML(session.details)}</p></div>${explanation}${adaptationActions}${session.race ? '<button class="button race-button full" data-open="raceResultModal">Registrar resultado</button>' : '<button class="button primary full" data-open="workoutModal">＋ Registrar este treino</button>'}`;
   }
 
-  function nutritionFor(session) {
-    if (!session) return { level: "Recuperação", title: "Dia sem corrida", focus: "Manter as cinco refeições", pre: "Café da manhã habitual: 2 ovos + pão.", post: "Arroz, feijão e frango nas refeições principais.", hydration: "Água distribuída ao longo do dia." };
-    const hard = /Intervalado|Tempo|Longão|Prova/.test(session.type);
-    const race = session.type === "Prova";
-    return {
-      level: race ? "Dia de prova" : session.type,
-      title: `${numberBR(session.distance)} km · RPE ${session.rpe}`,
-      focus: race ? "Usar apenas alimentos e horários já testados" : hard ? "Chegar com energia e recuperar depois" : "Manter leveza e regularidade",
-      pre: race ? "Refeição habitual com antecedência; nada novo no dia." : hard ? "Pão e vitamina de banana antes do esforço, respeitando sua digestão." : "2 ovos + pão; água antes de sair.",
-      post: hard ? "Vitamina com leite, banana, aveia e pasta de amendoim; depois refeição completa." : "Refeição habitual com arroz, feijão e frango.",
-      hydration: hard ? "Reforçar água antes e depois; observar calor e duração." : "Água ao longo do dia, sem exageros de última hora."
-    };
-  }
-
   function renderNutrition() {
     const today = localISO();
     const todaySession = adaptivePlan.find(session => session.date === today);
-    const guidance = nutritionFor(todaySession);
-    $("#nutritionToday").innerHTML = `<div><span class="eyebrow">FOCO DE HOJE · ${escapeHTML(guidance.level.toUpperCase())}</span><h2>${escapeHTML(guidance.title)}</h2><p>${escapeHTML(guidance.focus)}</p></div><div class="nutrition-steps"><span><b>ANTES</b>${escapeHTML(guidance.pre)}</span><span><b>DEPOIS</b>${escapeHTML(guidance.post)}</span><span><b>HIDRATAÇÃO</b>${escapeHTML(guidance.hydration)}</span></div>`;
+    const guidance = nutritionRecommendations(state, todaySession, today);
+    const slotMarkup = guidance.slots.map(slot => {
+      if (!slot.selected) return `<article class="meal-option empty-meal"><span>${escapeHTML(slot.label)}</span><strong>Sem opção compatível</strong><small>Revise alergias e restrições ou converse com nutricionista.</small></article>`;
+      return `<article class="meal-option"><span>${escapeHTML(slot.label)}</span><strong>${escapeHTML(slot.selected.name)}</strong><small>${escapeHTML(slot.selected.ingredients.join(" · "))}</small><p>${escapeHTML(slot.reason)}</p><div><button class="text-button" type="button" data-nutrition-action="liked" data-nutrition-date="${today}" data-nutrition-slot="${slot.id}" data-meal-id="${escapeHTML(slot.selected.id)}">Gostei</button><button class="text-button" type="button" data-nutrition-swap="${slot.id}" data-nutrition-date="${today}">Trocar</button><button class="text-button danger" type="button" data-nutrition-action="disliked" data-nutrition-date="${today}" data-nutrition-slot="${slot.id}" data-meal-id="${escapeHTML(slot.selected.id)}">Não serve</button></div></article>`;
+    }).join("");
+    $("#nutritionToday").classList.add("nutrition-recommendation");
+    $("#nutritionToday").innerHTML = `<div class="nutrition-context"><span class="eyebrow">FOCO DE HOJE · ${escapeHTML(guidance.level.toUpperCase())}</span><h2>${todaySession ? `${numberBR(todaySession.distance)} km · RPE ${escapeHTML(todaySession.rpe)}` : "Rotina sem corrida"}</h2><p>${escapeHTML(guidance.focus)}</p><small>Hidratação: ${escapeHTML(guidance.hydration)}</small></div><div class="nutrition-meals">${slotMarkup}</div><p class="nutrition-safety">${escapeHTML(guidance.safetyNote)} · Motor nutricional v${guidance.engineVersion}</p>`;
     const planByDate = new Map(adaptivePlan.map(session => [session.date, session]));
     const days = Array.from({ length: 7 }, (_, index) => localISO(addDays(parseDate(today), index)));
-    $("#nutritionWeek").innerHTML = days.map(date => { const session = planByDate.get(date); const item = nutritionFor(session); return `<div class="nutrition-day"><span><b>${escapeHTML(parseDate(date).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""))}</b><small>${escapeHTML(dateLabel(date))}</small></span><div><strong>${escapeHTML(item.level)}</strong><small>${escapeHTML(item.focus)}</small></div></div>`; }).join("");
+    $("#nutritionWeek").innerHTML = days.map(date => { const item = nutritionRecommendations(state, planByDate.get(date), date); return `<div class="nutrition-day"><span><b>${escapeHTML(parseDate(date).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""))}</b><small>${escapeHTML(dateLabel(date))}</small></span><div><strong>${escapeHTML(item.level)}</strong><small>${escapeHTML(item.focus)}</small></div></div>`; }).join("");
     $("#nutritionContext").textContent = state.nutritionProfile?.goal === "body-composition"
       ? "Refeições consistentes alinhadas ao seu objetivo corporal"
       : "Refeições consistentes para sustentar treino e recuperação";
+  }
+
+  function saveNutritionInteraction({ date, slot, mealId, action }) {
+    state.nutritionHistory.push(createNutritionFeedback({ date, slot, mealId, action }));
+    saveState(action === "liked" ? "Preferência salva para próximas sugestões." : action === "disliked" ? "Essa opção perderá prioridade." : "Refeição substituída.");
+    renderNutrition();
+  }
+
+  function swapNutritionOption(date, slotId) {
+    const session = adaptivePlan.find(item => item.date === date);
+    const guidance = nutritionRecommendations(state, session, date);
+    const slot = guidance.slots.find(item => item.id === slotId);
+    if (!slot || slot.options.length < 2) { showToast("Não há outra opção compatível com seu perfil agora."); return; }
+    const currentIndex = slot.options.findIndex(item => item.id === slot.selected?.id);
+    const next = slot.options[(currentIndex + 1) % slot.options.length];
+    saveNutritionInteraction({ date, slot: slotId, mealId: next.id, action: "selected" });
   }
 
   function shoeDistance(shoe) {
@@ -919,6 +927,10 @@ import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitution
       if (missButton) { substitutionSessionId = missButton.dataset.missSession; saveTrainingDecision("missed"); }
       const replacementButton = event.target.closest("[data-replacement-id]");
       if (replacementButton) saveTrainingDecision("substituted", replacementButton.dataset.replacementId);
+      const nutritionAction = event.target.closest("[data-nutrition-action]");
+      if (nutritionAction) saveNutritionInteraction({ date: nutritionAction.dataset.nutritionDate, slot: nutritionAction.dataset.nutritionSlot, mealId: nutritionAction.dataset.mealId, action: nutritionAction.dataset.nutritionAction });
+      const nutritionSwap = event.target.closest("[data-nutrition-swap]");
+      if (nutritionSwap) swapNutritionOption(nutritionSwap.dataset.nutritionDate, nutritionSwap.dataset.nutritionSwap);
       const raceCard = event.target.closest("[data-race-history]"); if (raceCard) { selectedRaceHistory = raceCard.dataset.raceHistory; renderRaceHistory(); }
       const editButton = event.target.closest("[data-edit-workout]");
       if (editButton) { const workout = state.workouts.find(item => item.id === editButton.dataset.editWorkout); if (workout) openWorkoutForm(workout); }

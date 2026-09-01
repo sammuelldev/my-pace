@@ -27,6 +27,15 @@ export const RESEARCH_SOURCES = [
     url: "https://journals.lww.com/acsm-msse/fulltext/2015/11000/updating_acsm_s_recommendations_for_exercise.28.aspx",
     supports: ["symptoms-stop-and-seek-guidance", "gradual-return"],
     reviewedAt: "2026-09-01"
+  },
+  {
+    id: "acsm-nutrition-performance-2016",
+    title: "Nutrition and Athletic Performance",
+    organization: "Academy of Nutrition and Dietetics, Dietitians of Canada and ACSM",
+    year: 2016,
+    url: "https://pubmed.ncbi.nlm.nih.gov/26920240/",
+    supports: ["food-and-fluid-timing", "training-recovery-nutrition", "individualized-nutrition"],
+    reviewedAt: "2026-09-01"
   }
 ];
 
