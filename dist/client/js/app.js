@@ -1,9 +1,11 @@
 import {
+  createCloudAccount,
   firebaseIsConfigured,
   friendlyFirebaseError,
   initializeCloud,
   removeCloudProfilePhoto,
   saveCloudState,
+  sendCloudPasswordReset,
   signInCloud,
   signInWithGoogle,
   signOutCloud,
@@ -13,12 +15,13 @@ import {
 import {
   createDefaultState,
   normalizeEquipment,
+  hasMeaningfulData,
   normalizeRace,
   normalizeReadiness,
   normalizeState,
   normalizeWorkout
 } from "./core/schema.js";
-import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/storage.js";
+import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocalState, userStorageKey } from "./core/storage.js";
 
 (() => {
   "use strict";
@@ -43,6 +46,8 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
   let cloudConfigured = firebaseIsConfigured();
   let applyingCloud = false;
   let lastDeletedWorkout = null;
+  let activeStorageKey = null;
+  let pendingAccountName = "";
 
   function uid() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
   function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -82,7 +87,11 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
   function paceSeconds(run) { return Number(run.durationSeconds || run.result?.officialSeconds || 0) / Number(run.distance || run.result?.distance || 1); }
 
   function persistLocal() {
-    try { state = saveLocalState(state); volatileState = state; return true; }
+    try {
+      state = activeStorageKey ? saveLocalState(state, localStorage, activeStorageKey) : normalizeState(state);
+      volatileState = state;
+      return true;
+    }
     catch (_) { showToast("Não foi possível salvar. Exporte um backup e verifique o armazenamento do navegador."); return false; }
   }
 
@@ -188,9 +197,6 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
     workoutForm?.insertAdjacentHTML("afterbegin", '<input name="workoutId" type="hidden">');
     const workoutTitle = $("#workoutForm h2"); if (workoutTitle) workoutTitle.id = "workoutModalTitle";
     const workoutSubmit = $('#workoutForm button[type="submit"]'); if (workoutSubmit) workoutSubmit.id = "workoutSubmit";
-
-    const loginFirstLabel = $("#loginForm label");
-    loginFirstLabel?.insertAdjacentHTML("beforebegin", '<button class="button google-button full" type="button" id="googleSignIn">Entrar com Google</button><div class="form-divider"><span>ou com e-mail</span></div>');
 
     $$(".checklist input").forEach((input, index) => { input.dataset.checkItem = String(index); });
   }
@@ -539,8 +545,9 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
     const planByDate = new Map(adaptivePlan.map(session => [session.date, session]));
     const days = Array.from({ length: 7 }, (_, index) => localISO(addDays(parseDate(today), index)));
     $("#nutritionWeek").innerHTML = days.map(date => { const session = planByDate.get(date); const item = nutritionFor(session); return `<div class="nutrition-day"><span><b>${escapeHTML(parseDate(date).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""))}</b><small>${escapeHTML(dateLabel(date))}</small></span><div><strong>${escapeHTML(item.level)}</strong><small>${escapeHTML(item.focus)}</small></div></div>`; }).join("");
-    const weight = [...state.weights].sort((a, b) => a.date.localeCompare(b.date)).at(-1)?.weight || 49;
-    $("#nutritionContext").textContent = weight < 57 ? "Cinco refeições para sustentar treino e ganho gradual" : "Cinco refeições para sustentar treino e recuperação";
+    $("#nutritionContext").textContent = state.nutritionProfile?.goal === "body-composition"
+      ? "Refeições consistentes alinhadas ao seu objetivo corporal"
+      : "Refeições consistentes para sustentar treino e recuperação";
   }
 
   function shoeDistance(shoe) {
@@ -558,13 +565,21 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
 
   function renderWeight() {
     const weights = [...state.weights].sort((a, b) => a.date.localeCompare(b.date));
-    const first = weights[0]?.weight ?? 49;
-    const current = weights.at(-1)?.weight ?? first;
+    if (!weights.length) {
+      $("#currentWeight").textContent = "—";
+      $("#weightInput").value = "";
+      $("#weightSummary").textContent = "Nenhum registro ainda";
+      $("#weightProgress").style.width = "0%";
+      lineChart($("#weightChart"), [], item => item.weight, value => numberBR(value, 1), "weight", "#4d8dff");
+      return;
+    }
+    const first = weights[0].weight;
+    const current = weights.at(-1).weight;
     const gained = current - first;
     $("#currentWeight").textContent = numberBR(current);
     $("#weightInput").value = current;
     $("#weightSummary").textContent = `${gained >= 0 ? "+" : ""}${numberBR(gained)} kg desde o início`;
-    $("#weightProgress").style.width = `${clamp((current - 49) / 8 * 100, 0, 100)}%`;
+    $("#weightProgress").style.width = `${clamp(weights.length / 12 * 100, 8, 100)}%`;
     lineChart($("#weightChart"), weights, item => item.weight, value => numberBR(value, 1), "weight", "#4d8dff");
   }
 
@@ -706,6 +721,79 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
     return true;
   }
 
+  function setAuthMessage(message = "", success = false) {
+    const target = $("#authMessage");
+    if (!target) return;
+    target.textContent = message;
+    target.classList.toggle("success", success);
+  }
+
+  function showAuthMode(mode = "login") {
+    const config = {
+      login: ["Entre no MyPace", "Acesse seus treinos e recomendações em qualquer dispositivo."],
+      signup: ["Crie seu espaço", "Leva menos de um minuto. Depois, vamos personalizar o seu ponto de partida."],
+      reset: ["Recupere sua senha", "Enviaremos as instruções para o e-mail da sua conta."]
+    };
+    const selected = config[mode] ? mode : "login";
+    $("#authTitle").textContent = config[selected][0];
+    $("#authSubtitle").textContent = config[selected][1];
+    $("#authLoginForm").hidden = selected !== "login";
+    $("#authSignupForm").hidden = selected !== "signup";
+    $("#authResetForm").hidden = selected !== "reset";
+    $("#authGoogle").hidden = selected === "reset";
+    $("#authCard .form-divider").hidden = selected === "reset";
+    $("#authCard .auth-tabs").hidden = selected === "reset";
+    $$("[data-auth-mode]", $("#authCard")).forEach(button => {
+      const active = button.dataset.authMode === selected;
+      if (button.getAttribute("role") === "tab") {
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      }
+    });
+    setAuthMessage();
+  }
+
+  function showSignedOutRoute() {
+    document.body.classList.remove("authenticated");
+    $("#productApp").hidden = true;
+    $("#authGate").hidden = false;
+    $("#authLoading").hidden = true;
+    $("#authConfig").hidden = cloudConfigured;
+    $("#authForms").hidden = !cloudConfigured;
+    if (cloudConfigured) showAuthMode("login");
+  }
+
+  function showAuthenticatedRoute() {
+    $("#authGate").hidden = true;
+    $("#productApp").hidden = false;
+    document.body.classList.add("authenticated");
+    renderAll();
+  }
+
+  function prepareUserLocalState(user) {
+    activeStorageKey = userStorageKey(user.uid);
+    let scoped = createDefaultState();
+    try { scoped = loadLocalState(localStorage, activeStorageKey); }
+    catch (_) { scoped = createDefaultState(); }
+    const legacy = hasMeaningfulData(scoped) ? null : claimLegacyStateForUser(user.uid);
+    state = hasMeaningfulData(scoped) ? scoped : (legacy || scoped);
+    const accountName = pendingAccountName || user.displayName || "";
+    if (state.profile.name === "Atleta" && accountName) state.profile.name = accountName.slice(0, 40);
+    pendingPhoto = state.profile.photo;
+    pendingAccountName = "";
+  }
+
+  async function runAuthAction(form, action, busyText) {
+    const submit = form.querySelector('button[type="submit"]');
+    const original = submit.textContent;
+    setAuthMessage();
+    submit.disabled = true;
+    submit.textContent = busyText;
+    try { await action(); }
+    catch (error) { setAuthMessage(friendlyFirebaseError(error)); }
+    finally { submit.disabled = false; submit.textContent = original; }
+  }
+
   function setCloudUI(mode, detail = "") {
     const modes = {
       local: ["Modo local", "Firebase ainda não configurado", "Firebase não conectado", "O site continua salvando neste navegador."],
@@ -727,7 +815,15 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
 
   async function handleCloudUser(user) {
     cloudUnsubscribe?.(); cloudUnsubscribe = null; cloudUser = user;
-    if (!user) { setCloudUI(cloudConfigured ? "signedOut" : "local"); return; }
+    if (!user) {
+      activeStorageKey = null;
+      state = createDefaultState();
+      pendingPhoto = null;
+      setCloudUI(cloudConfigured ? "signedOut" : "local");
+      showSignedOutRoute();
+      return;
+    }
+    prepareUserLocalState(user);
     setCloudUI("connecting"); let firstSnapshot = true;
     cloudUnsubscribe = watchCloudState(user.uid, async (remoteState, cloudMeta = {}) => {
       if (remoteState) {
@@ -740,18 +836,26 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
         if ((state.settings.onboarded || state.workouts.length) && $("#onboardingModal").open) $("#onboardingModal").close();
         setCloudUI("online");
         if (shouldPersistMigration) await saveCloudState(user.uid, state);
+        showAuthenticatedRoute();
         if (wasFirstSnapshot) showToast(cloudMeta.source === "legacy" ? "Dados antigos migrados com segurança." : "Dados sincronizados com a nuvem.");
         return;
       }
-      if (firstSnapshot) { firstSnapshot = false; try { if (state.profile.photo?.startsWith("data:image/")) { state.profile.photo = await uploadProfilePhoto(user.uid, state.profile.photo); pendingPhoto = state.profile.photo; persistLocal(); } await saveCloudState(user.uid, state); setCloudUI("online"); showToast("Dados locais enviados para a nuvem."); } catch (error) { setCloudUI("error", friendlyFirebaseError(error)); } }
+      if (firstSnapshot) { firstSnapshot = false; try { if (state.profile.photo?.startsWith("data:image/")) { state.profile.photo = await uploadProfilePhoto(user.uid, state.profile.photo); pendingPhoto = state.profile.photo; persistLocal(); } await saveCloudState(user.uid, state); setCloudUI("online"); showAuthenticatedRoute(); showToast(hasMeaningfulData(state) ? "Dados locais enviados para a sua conta." : "Sua conta está pronta."); } catch (error) { setCloudUI("error", friendlyFirebaseError(error)); setAuthMessage(friendlyFirebaseError(error)); showSignedOutRoute(); } }
     }, error => setCloudUI("error", friendlyFirebaseError(error)));
   }
 
-  async function startCloud() { if (!cloudConfigured) { setCloudUI("local"); return; } setCloudUI("connecting"); const result = await initializeCloud(handleCloudUser, error => setCloudUI("error", friendlyFirebaseError(error))); cloudConfigured = result.configured; }
-  function openCloudLogin() { if (!cloudConfigured) { showToast("Configure js/firebase-config.js seguindo o guia incluído no ZIP."); return; } $("#loginMessage").textContent = ""; $("#loginModal").showModal(); }
+  async function startCloud() {
+    if (!cloudConfigured) { setCloudUI("local"); showSignedOutRoute(); return; }
+    setCloudUI("connecting");
+    const result = await initializeCloud(handleCloudUser, error => { setCloudUI("error", friendlyFirebaseError(error)); showSignedOutRoute(); setAuthMessage(friendlyFirebaseError(error)); });
+    cloudConfigured = result.configured;
+  }
+  function openCloudLogin() { if (!cloudConfigured) { showToast("Configure js/firebase-config.js seguindo o guia do projeto."); return; } showSignedOutRoute(); showAuthMode("login"); }
 
   function bindEvents() {
     document.addEventListener("click", event => {
+      const authModeButton = event.target.closest("[data-auth-mode]");
+      if (authModeButton) showAuthMode(authModeButton.dataset.authMode);
       const viewButton = event.target.closest("[data-view]"); if (viewButton) navigate(viewButton.dataset.view);
       const modalButton = event.target.closest("[data-open]");
       if (modalButton) {
@@ -878,8 +982,31 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
     $("#importData").addEventListener("change", event => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = normalizeState(JSON.parse(reader.result)); if (!window.confirm("Importar este backup e substituir os dados atuais?")) return; state = imported; saveState("Backup importado. Experiência recalculada."); selectedPlan = 0; renderAll(); } catch (_) { showToast("Esse arquivo não é um backup válido do Pace."); } finally { event.target.value = ""; } }; reader.readAsText(file); });
 
     $("#cloudAccount").addEventListener("click", () => cloudUser ? navigate("configuracoes") : openCloudLogin()); $("#cloudAction").addEventListener("click", openCloudLogin); $("#cloudSignOut").addEventListener("click", async () => { await signOutCloud(); showToast("Conta desconectada. Os dados locais foram mantidos."); });
-    $("#googleSignIn").addEventListener("click", async event => { const button = event.currentTarget, message = $("#loginMessage"); message.textContent = ""; button.disabled = true; button.textContent = "Conectando…"; try { await signInWithGoogle(); $("#loginModal").close(); } catch (error) { message.textContent = friendlyFirebaseError(error); } finally { button.disabled = false; button.textContent = "Entrar com Google"; } });
-    $("#loginForm").addEventListener("submit", async event => { event.preventDefault(); const form = new FormData(event.currentTarget), message = $("#loginMessage"), submit = event.currentTarget.querySelector('button[type="submit"]'); message.textContent = ""; submit.disabled = true; submit.textContent = "Conectando…"; try { await signInCloud(String(form.get("email")).trim(), String(form.get("password"))); $("#loginModal").close(); event.currentTarget.reset(); } catch (error) { message.textContent = friendlyFirebaseError(error); } finally { submit.disabled = false; submit.textContent = "Entrar e sincronizar"; } });
+    $("#authGoogle").addEventListener("click", async event => {
+      const button = event.currentTarget;
+      setAuthMessage(); button.disabled = true; button.textContent = "Conectando…";
+      try { await signInWithGoogle(); }
+      catch (error) { setAuthMessage(friendlyFirebaseError(error)); }
+      finally { button.disabled = false; button.textContent = "Continuar com Google"; }
+    });
+    $("#authLoginForm").addEventListener("submit", event => {
+      event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+      runAuthAction(form, async () => { await signInCloud(String(data.get("email")).trim(), String(data.get("password"))); form.reset(); }, "Entrando…");
+    });
+    $("#authSignupForm").addEventListener("submit", event => {
+      event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+      const password = String(data.get("password"));
+      if (password !== String(data.get("confirmPassword"))) { setAuthMessage("As senhas não coincidem."); return; }
+      pendingAccountName = String(data.get("name") || "").trim().slice(0, 40);
+      runAuthAction(form, async () => { await createCloudAccount(String(data.get("email")).trim(), password, pendingAccountName); form.reset(); }, "Criando conta…");
+    });
+    $("#authResetForm").addEventListener("submit", event => {
+      event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+      runAuthAction(form, async () => {
+        await sendCloudPasswordReset(String(data.get("email")).trim());
+        setAuthMessage("Link enviado. Confira também a caixa de spam.", true);
+      }, "Enviando…");
+    });
 
     $$("dialog").forEach(dialog => { dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); }); dialog.addEventListener("close", () => { if (dialog.id === "profileModal") renderAll(); }); });
   }
@@ -890,5 +1017,4 @@ import { loadLocalState, mergeLocalAndRemote, saveLocalState } from "./core/stor
   renderAll();
   startCloud();
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (state.settings.theme === "system") applyTheme(); });
-  if (!state.settings.onboarded && !state.workouts.length) setTimeout(() => $("#onboardingModal").showModal(), 500);
 })();

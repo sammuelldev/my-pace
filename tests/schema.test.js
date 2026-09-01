@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { LEGACY_BACKUP_KEY, SCHEMA_VERSION, STORAGE_KEY, normalizeState } from "../js/core/schema.js";
-import { loadLocalState, mergeLocalAndRemote } from "../js/core/storage.js";
+import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, userStorageKey } from "../js/core/storage.js";
 
 const fixedNow = new Date("2026-09-01T12:00:00.000Z");
 
@@ -59,4 +59,12 @@ test("merge preserva itens locais e remotos sem duplicar IDs", () => {
   const merged = mergeLocalAndRemote(local, remote);
   assert.equal(merged.profile.name, "Samuel");
   assert.deepEqual(new Set(merged.workouts.map(item => item.id)), new Set(["run-1", "local-2", "remote-2"]));
+});
+
+test("cache local fica isolado por uid e o legado só pode ser reivindicado por uma conta", () => {
+  const values = new Map([[STORAGE_KEY, JSON.stringify(legacyState())]]);
+  const storage = { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+  assert.notEqual(userStorageKey("user-a"), userStorageKey("user-b"));
+  assert.equal(claimLegacyStateForUser("user-a", storage).profile.name, "Samuel");
+  assert.equal(claimLegacyStateForUser("user-b", storage), null);
 });

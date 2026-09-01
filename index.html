@@ -20,7 +20,56 @@
   <script src="js/app.js" type="module"></script>
 </head>
 <body>
-  <div class="app">
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
+    <div class="auth-visual" aria-hidden="true">
+      <div class="auth-orbit"><span>⌁</span><i></i><i></i><i></i></div>
+      <span class="eyebrow">MY PACE 2.0</span>
+      <h1>Treino que entende<br>o seu momento.</h1>
+      <p>Planejamento de corrida explicável, adaptativo e construído com os seus registros.</p>
+      <div class="auth-benefits"><span>✓ Seus dados, sua conta</span><span>✓ Recomendações transparentes</span><span>✓ Continuidade entre dispositivos</span></div>
+    </div>
+    <div class="auth-panel">
+      <div class="auth-card" id="authCard">
+        <div class="auth-brand"><span class="brand-mark">⌁</span><strong>MY PACE</strong></div>
+        <div class="auth-loading" id="authLoading"><span class="loading-ring"></span><strong>Preparando seu espaço…</strong><small>Verificando uma sessão segura</small></div>
+        <div id="authForms" hidden>
+          <span class="eyebrow">CONTA PESSOAL</span>
+          <h2 id="authTitle">Entre no MyPace</h2>
+          <p class="muted" id="authSubtitle">Acesse seus treinos e recomendações em qualquer dispositivo.</p>
+          <div class="auth-tabs" role="tablist" aria-label="Acesso à conta">
+            <button type="button" class="active" data-auth-mode="login" role="tab" aria-selected="true">Entrar</button>
+            <button type="button" data-auth-mode="signup" role="tab" aria-selected="false">Criar conta</button>
+          </div>
+          <button class="button google-button full auth-google" type="button" id="authGoogle">Continuar com Google</button>
+          <div class="form-divider"><span>ou use seu e-mail</span></div>
+          <form id="authLoginForm" class="auth-form">
+            <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
+            <label>Senha<input name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="Sua senha"></label>
+            <button class="text-button auth-forgot" type="button" data-auth-mode="reset">Esqueci minha senha</button>
+            <button class="button primary full" type="submit">Entrar</button>
+          </form>
+          <form id="authSignupForm" class="auth-form" hidden>
+            <label>Como devemos chamar você?<input name="name" maxlength="40" autocomplete="name" required placeholder="Seu nome"></label>
+            <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
+            <label>Senha<input name="password" type="password" autocomplete="new-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></label>
+            <label>Confirmar senha<input name="confirmPassword" type="password" autocomplete="new-password" minlength="6" required placeholder="Repita sua senha"></label>
+            <button class="button primary full" type="submit">Criar minha conta</button>
+          </form>
+          <form id="authResetForm" class="auth-form" hidden>
+            <p class="auth-reset-copy">Informe seu e-mail e enviaremos um link seguro para definir uma nova senha.</p>
+            <label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>
+            <button class="button primary full" type="submit">Enviar link de recuperação</button>
+            <button class="text-button full" type="button" data-auth-mode="login">Voltar para entrar</button>
+          </form>
+          <p class="form-message auth-message" id="authMessage" role="alert" aria-live="polite"></p>
+        </div>
+        <div class="auth-config" id="authConfig" hidden><strong>Firebase precisa ser configurado</strong><p>Siga o arquivo <code>CONFIGURAR-FIREBASE.md</code> para ativar as contas.</p></div>
+      </div>
+      <small class="auth-privacy">Seus dados privados ficam isolados pela sua conta.</small>
+    </div>
+  </section>
+
+  <div class="app" id="productApp" hidden>
     <aside class="sidebar" id="sidebar">
       <button class="brand" data-view="inicio" aria-label="Ir para o início"><span class="brand-mark">⌁</span><span>PACE<small>performance</small></span></button>
       <nav class="side-nav" aria-label="Seções do painel">
@@ -37,7 +86,7 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="race-mini" id="raceMini" hidden><span>PRÓXIMA PROVA</span><strong id="sidebarRace">—</strong><small id="sidebarCountdown">—</small></div>
-        <button class="profile-button" id="openProfile"><span class="profile-avatar avatar-render"><span>SA</span></span><span><strong class="profile-name">Samuel</strong><small>Editar perfil e foto</small></span><span class="chevron">›</span></button>
+        <button class="profile-button" id="openProfile"><span class="profile-avatar avatar-render"><span>AT</span></span><span><strong class="profile-name">Atleta</strong><small>Editar perfil e foto</small></span><span class="chevron">›</span></button>
       </div>
     </aside>
 
@@ -46,7 +95,7 @@
       <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMessage"></span><button type="button" id="toastAction" hidden></button></div>
       <main>
         <section class="view active" id="inicio">
-          <div class="page-head"><div><span class="eyebrow">CENTRAL DE PERFORMANCE</span><h1><span id="greeting">Olá</span>, <span class="profile-name">Samuel</span>.</h1><p>Seu ritmo, sua rotina e seu próximo objetivo em um painel que evolui com você.</p></div><button class="button primary" data-open="workoutModal"><span>＋</span>Registrar treino</button></div>
+          <div class="page-head"><div><span class="eyebrow">CENTRAL DE PERFORMANCE</span><h1><span id="greeting">Olá</span>, <span class="profile-name">Atleta</span>.</h1><p>Seu ritmo, sua rotina e seu próximo objetivo em um painel que evolui com você.</p></div><button class="button primary" data-open="workoutModal"><span>＋</span>Registrar treino</button></div>
 
           <article class="no-race-hero" id="noRaceHero"><div><span class="eyebrow">PRÓXIMO OBJETIVO</span><h2>Qual será sua próxima prova?</h2><p>Registre a data e a distância. O Pace criará um ciclo adaptativo usando os seus treinos reais.</p><button class="button primary" data-open="nextRaceModal">＋ Adicionar próxima prova</button></div><span class="target-orbit">◎</span></article>
 
@@ -73,7 +122,7 @@
 
         <section class="view" id="desempenho"><div class="page-head"><div><span class="eyebrow">ANÁLISE</span><h1>Desempenho</h1><p>Evolução baseada nos registros reais, sem metas congeladas.</p></div></div><div class="metrics performance-metrics"></div><div class="two-columns lower"><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">PACE</span><h3>Evolução do ritmo</h3></div></div><div class="chart" id="performancePaceChart"></div></article><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">DISTÂNCIA</span><h3>Distância por corrida</h3></div></div><div class="chart" id="distanceChart"></div></article></div></section>
 
-        <section class="view" id="corpo"><div class="page-head"><div><span class="eyebrow">EVOLUÇÃO CORPORAL</span><h1>Corpo</h1><p>Acompanhe o ganho gradual de peso até 57 kg.</p></div></div><article class="panel weight-hero"><div><span class="eyebrow">META DE PESO</span><h2><strong id="currentWeight">49,0</strong> kg <span>→ 57 kg</span></h2><p id="weightSummary">0 kg desde o início</p><div class="progress"><i id="weightProgress"></i></div></div><form id="weightForm"><label for="weightInput">Peso atual</label><div><input id="weightInput" type="number" min="30" max="250" step="0.1" value="49"><button class="button primary" type="submit">Registrar</button></div></form></article><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">TENDÊNCIA</span><h3>Evolução do peso</h3></div></div><div class="chart tall" id="weightChart"></div></article></section>
+        <section class="view" id="corpo"><div class="page-head"><div><span class="eyebrow">EVOLUÇÃO CORPORAL</span><h1>Corpo</h1><p>Acompanhe métricas corporais apenas se isso fizer sentido para você.</p></div></div><article class="panel weight-hero"><div><span class="eyebrow">PESO REGISTRADO</span><h2><strong id="currentWeight">—</strong> <span id="currentWeightUnit">kg</span></h2><p id="weightSummary">Nenhum registro ainda</p><div class="progress"><i id="weightProgress"></i></div></div><form id="weightForm"><label for="weightInput">Peso atual</label><div><input id="weightInput" type="number" min="30" max="250" step="0.1" placeholder="Ex.: 65,5"><button class="button primary" type="submit">Registrar</button></div></form></article><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">TENDÊNCIA</span><h3>Evolução do peso</h3></div></div><div class="chart tall" id="weightChart"></div></article></section>
 
         <section class="view" id="alimentacao"><div class="page-head"><div><span class="eyebrow">ROTINA ADAPTATIVA</span><h1>Alimentação</h1><p>Organização das cinco refeições atualizada conforme o próximo estímulo.</p></div></div><article class="nutrition-focus" id="nutritionToday"></article><div class="nutrition-grid"><article class="panel"><div class="panel-head"><div><span class="eyebrow">PRÓXIMOS 7 DIAS</span><h3>Foco alimentar</h3></div><span>◇</span></div><div id="nutritionWeek"></div></article><article class="shake-card"><span class="eyebrow">BASE DA ROTINA</span><h2 id="nutritionContext">Cinco refeições com energia consistente</h2><p>O plano preserva os alimentos que você já consegue manter.</p><div><span>2 ovos + pão</span><span>Arroz + feijão</span><span>Frango</span><span>Cuscuz</span><span>Vitamina de banana</span><span>Guaraná do Amazonas</span></div><small>Sugestões organizacionais; não substituem nutricionista.</small></article></div></section>
 
@@ -83,13 +132,13 @@
 
         <section class="view" id="prova"><div class="page-head"><div><span class="eyebrow">COMPETIÇÕES</span><h1>Modo prova</h1><p>Planeje a próxima largada e registre o resultado oficial.</p></div><button class="button race-button" data-open="nextRaceModal">＋ Adicionar prova</button></div><article class="panel no-race-page" id="raceEmptyState"><span>◎</span><h2>Nenhuma prova agendada</h2><p>Informe nome, data e distância. O ciclo em andamento só aparecerá depois disso.</p><button class="button primary" data-open="nextRaceModal">Definir próxima competição</button></article><div id="raceActiveContent" hidden><article class="race-mode"><div><span class="status-pill dark"><i></i>PRÓXIMA PROVA</span><h2><span id="raceModeDays">—</span> dias</h2><p id="racePageMeta">—</p></div><div class="race-bib"><span id="raceBibDistance">—</span><small>KM</small></div></article><div class="race-active-actions"><div><span class="eyebrow">OBJETIVO ATUAL</span><h2 id="racePageName">—</h2><p id="racePageDetails">—</p></div><div><button class="button" id="editRaceButton">Editar</button><button class="link-button danger" id="cancelRaceButton">Cancelar prova</button></div></div><div class="two-columns"><article class="panel strategy"><span class="eyebrow">ESTRATÉGIA ADAPTATIVA</span><h3>Esforço por trecho</h3><div id="raceStrategy"></div></article><article class="panel checklist"><span class="eyebrow">CHECKLIST</span><h3>Antes de sair</h3><label><input type="checkbox"> Tênis já testado</label><label><input type="checkbox"> Celular ou relógio carregado</label><label><input type="checkbox"> Roupa testada</label><label><input type="checkbox"> Refeição habitual</label><label><input type="checkbox"> Aquecimento curto</label></article></div><article class="race-result-cta" id="raceResultCta" hidden><div><span class="eyebrow">RESULTADO PENDENTE</span><h2>Como foi a prova?</h2><p>Registre o resultado para mover esta prova ao histórico profissional.</p></div><button class="button race-button" data-open="raceResultModal">Registrar resultado</button></article></div></section>
 
-        <section class="view" id="configuracoes"><div class="page-head"><div><span class="eyebrow">PREFERÊNCIAS</span><h1>Configurações</h1><p>Perfil, backup e sincronização desta instalação.</p></div></div><div class="settings-grid"><button class="setting panel" id="settingsProfile"><span>◉</span><div><strong>Perfil e foto</strong><small>Nome e imagem pessoal</small></div><b>›</b></button><article class="setting panel"><span>▦</span><div><strong>Plano adaptativo</strong><small>Seg · Qua · Qui · Dom</small></div></article><button class="setting panel" id="cloudAccount"><span>☁</span><div><strong id="cloudStatus">Modo local</strong><small id="cloudStatusDetail">Conecte o Firebase para sincronizar</small></div><b>›</b></button><article class="setting panel"><span>◇</span><div><strong>Privacidade</strong><small>Dados protegidos por usuário</small></div></article></div><article class="panel backup-card"><div><span class="eyebrow">SEGURANÇA DOS DADOS</span><h3>Backup portátil</h3><p>Exporte seus dados antes de trocar de aparelho, navegador ou domínio.</p></div><div><button class="button" id="exportData">Exportar backup</button><label class="button file-button">Importar backup<input id="importData" type="file" accept=".json,application/json"></label></div></article><article class="panel cloud-card"><div><span class="eyebrow">SINCRONIZAÇÃO</span><h3 id="cloudCardTitle">Firebase não conectado</h3><p id="cloudCardText">O site está funcionando com armazenamento local.</p></div><div><button class="button primary" id="cloudAction">Entrar na nuvem</button><button class="link-button danger" id="cloudSignOut" hidden>Sair da conta</button></div></article></section>
+        <section class="view" id="configuracoes"><div class="page-head"><div><span class="eyebrow">PREFERÊNCIAS</span><h1>Configurações</h1><p>Perfil, conta, dados e personalização.</p></div></div><div class="settings-grid"><button class="setting panel" id="settingsProfile"><span>◉</span><div><strong>Perfil e foto</strong><small>Nome e imagem pessoal</small></div><b>›</b></button><article class="setting panel"><span>▦</span><div><strong>Plano adaptativo</strong><small id="trainingDaysSummary">Dias definidos no seu perfil</small></div></article><button class="setting panel" id="cloudAccount"><span>☁</span><div><strong id="cloudStatus">Verificando conta</strong><small id="cloudStatusDetail">Conectando com segurança</small></div><b>›</b></button><article class="setting panel"><span>◇</span><div><strong>Privacidade</strong><small>Dados protegidos por usuário</small></div></article></div><article class="panel backup-card"><div><span class="eyebrow">SEGURANÇA DOS DADOS</span><h3>Backup portátil</h3><p>Exporte seus dados antes de trocar de aparelho, navegador ou domínio.</p></div><div><button class="button" id="exportData">Exportar backup</button><label class="button file-button">Importar backup<input id="importData" type="file" accept=".json,application/json"></label></div></article><article class="panel cloud-card"><div><span class="eyebrow">CONTA E SINCRONIZAÇÃO</span><h3 id="cloudCardTitle">Verificando sua conta</h3><p id="cloudCardText">Aguarde enquanto protegemos seus dados.</p></div><div><button class="button primary" id="cloudAction">Conta conectada</button><button class="link-button danger" id="cloudSignOut" hidden>Sair da conta</button></div></article></section>
       </main>
       <nav class="mobile-nav" aria-label="Navegação móvel"><button class="active" data-view="inicio"><span>⌂</span>Início</button><button data-view="plano"><span>▦</span>Plano</button><button data-view="treinos"><span>↗</span>Treinos</button><button data-view="desempenho"><span>⌁</span>Dados</button><button data-view="corpo"><span>◉</span>Corpo</button><button id="mobileMore"><span>☰</span>Mais</button></nav>
     </div>
   </div>
 
-  <dialog class="modal" id="profileModal"><form method="dialog" class="modal-card" id="profileForm"><button class="modal-close" type="button" data-close aria-label="Fechar">×</button><span class="eyebrow">PERFIL PESSOAL</span><h2>Sua foto e nome</h2><p class="muted">A imagem é comprimida antes de ser salva.</p><div class="profile-editor"><button type="button" class="photo-preview avatar-render" id="choosePhoto" aria-label="Escolher foto"><span>SA</span><i>＋</i></button><input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden><div><label for="profileNameInput">Nome</label><input id="profileNameInput" maxlength="40" value="Samuel"><div class="photo-actions"><button type="button" class="button" id="changePhoto">Escolher foto</button><button type="button" class="link-button danger" id="removePhoto">Remover</button></div></div></div><button class="button primary full" type="submit">Salvar perfil</button></form></dialog>
+  <dialog class="modal" id="profileModal"><form method="dialog" class="modal-card" id="profileForm"><button class="modal-close" type="button" data-close aria-label="Fechar">×</button><span class="eyebrow">PERFIL PESSOAL</span><h2>Sua foto e nome</h2><p class="muted">A imagem é comprimida antes de ser salva.</p><div class="profile-editor"><button type="button" class="photo-preview avatar-render" id="choosePhoto" aria-label="Escolher foto"><span>AT</span><i>＋</i></button><input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden><div><label for="profileNameInput">Nome</label><input id="profileNameInput" maxlength="40" value="Atleta"><div class="photo-actions"><button type="button" class="button" id="changePhoto">Escolher foto</button><button type="button" class="link-button danger" id="removePhoto">Remover</button></div></div></div><button class="button primary full" type="submit">Salvar perfil</button></form></dialog>
 
   <dialog class="modal" id="workoutModal"><form method="dialog" class="modal-card form-grid" id="workoutForm"><button class="modal-close" type="button" data-close aria-label="Fechar">×</button><div class="span-2"><span class="eyebrow">REGISTRO RÁPIDO</span><h2>Como foi a corrida?</h2><p class="muted">O plano futuro será recalculado depois deste registro.</p></div><label>Data<input name="date" type="date" required></label><label>Distância (km)<input name="distance" type="number" min="0.1" max="100" step="0.01" required placeholder="3,00"></label><label>Duração (mm:ss ou hh:mm:ss)<input name="duration" pattern="[0-9]+:[0-5][0-9](:[0-5][0-9])?" required placeholder="16:00"></label><label>RPE<select name="rpe"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></label><label>Tipo<select name="type"><option>Corrida leve</option><option>Recuperação</option><option>Progressivo</option><option>Intervalado</option><option>Tempo run</option><option>Longão</option><option>Teste</option></select></label><label>Como se sentiu?<select name="feeling"><option>Muito bem</option><option selected>Bem</option><option>Normal</option><option>Cansado</option><option>Muito cansado</option></select></label><label>Dor lateral<select name="stitch"><option>Nenhuma</option><option>Leve</option><option>Moderada</option><option>Forte</option></select></label><label class="span-2">Tênis<select name="shoe" id="workoutShoe"><option value="">Não informar</option></select></label><label class="span-2">Notas<textarea name="notes" placeholder="Sensações, clima ou observações…"></textarea></label><button class="button primary span-2" type="submit">Salvar treino e adaptar plano</button></form></dialog>
 
@@ -99,7 +148,6 @@
 
   <dialog class="modal" id="shoeModal"><form method="dialog" class="modal-card" id="shoeForm"><button class="modal-close" type="button" data-close aria-label="Fechar">×</button><span class="eyebrow">EQUIPAMENTO</span><h2>Novo tênis</h2><label>Nome ou modelo<input name="name" required placeholder="Ex.: Duramo Speed 2"></label><label>Tipo<select name="type"><option>Treino diário</option><option>Velocidade</option><option>Longão</option><option>Prova</option><option>Recuperação</option></select></label><label>Vida útil estimada (km)<input name="lifespan" type="number" min="100" max="2000" value="600"></label><button class="button primary full" type="submit">Salvar equipamento</button></form></dialog>
 
-  <dialog class="modal" id="loginModal"><form method="dialog" class="modal-card" id="loginForm"><button class="modal-close" type="button" data-close aria-label="Fechar">×</button><span class="eyebrow">SINCRONIZAÇÃO PRIVADA</span><h2>Entrar no Pace</h2><p class="muted">Use o usuário criado no Firebase Authentication.</p><label>E-mail<input name="email" type="email" autocomplete="email" required placeholder="seuemail@exemplo.com"></label><label>Senha<input name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="Sua senha"></label><p class="form-message" id="loginMessage" role="alert"></p><button class="button primary full" type="submit">Entrar e sincronizar</button></form></dialog>
   <dialog class="modal" id="readinessModal">
     <form method="dialog" class="modal-card form-grid" id="readinessForm">
       <button class="modal-close" type="button" data-close aria-label="Fechar">&times;</button>

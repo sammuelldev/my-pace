@@ -61,6 +61,19 @@ export async function signInCloud(email, password) {
   return services.signInWithEmailAndPassword(auth, email, password);
 }
 
+export async function createCloudAccount(email, password, displayName) {
+  if (!auth || !services) throw new Error("Firebase ainda não foi inicializado.");
+  const credential = await services.createUserWithEmailAndPassword(auth, email, password);
+  const name = String(displayName || "").trim().slice(0, 40);
+  if (name) await services.updateProfile(credential.user, { displayName: name });
+  return credential;
+}
+
+export async function sendCloudPasswordReset(email) {
+  if (!auth || !services) throw new Error("Firebase ainda não foi inicializado.");
+  return services.sendPasswordResetEmail(auth, email);
+}
+
 export async function signInWithGoogle() {
   if (!auth || !services) throw new Error("Firebase ainda não foi inicializado.");
   const provider = new services.GoogleAuthProvider();
@@ -70,6 +83,26 @@ export async function signInWithGoogle() {
 
 export async function signOutCloud() {
   if (auth && services) await services.signOut(auth);
+}
+
+export function currentCloudUser() {
+  return auth?.currentUser || null;
+}
+
+export async function deleteCloudAccount(uid) {
+  if (!db || !services || !auth?.currentUser || auth.currentUser.uid !== uid) throw new Error("auth/requires-recent-login");
+  const collectionNames = [...Object.values(COLLECTIONS), "readiness", "pace"];
+  for (const collectionName of collectionNames) {
+    const snapshot = await services.getDocs(services.collection(db, "users", uid, collectionName));
+    for (let index = 0; index < snapshot.docs.length; index += 400) {
+      const batch = services.writeBatch(db);
+      snapshot.docs.slice(index, index + 400).forEach(item => batch.delete(item.ref));
+      await batch.commit();
+    }
+  }
+  await services.deleteDoc(services.doc(db, "users", uid));
+  cloudCache.delete(uid);
+  await services.deleteUser(auth.currentUser);
 }
 
 function rootDataFromState(state) {
@@ -192,6 +225,10 @@ export function friendlyFirebaseError(error) {
   const messages = {
     "auth/invalid-credential": "E-mail ou senha incorretos.",
     "auth/invalid-email": "Digite um e-mail válido.",
+    "auth/email-already-in-use": "Já existe uma conta com este e-mail.",
+    "auth/weak-password": "Use uma senha com pelo menos 6 caracteres.",
+    "auth/requires-recent-login": "Por segurança, saia e entre novamente antes de excluir a conta.",
+    "auth/user-not-found": "Se este e-mail estiver cadastrado, você receberá as instruções de recuperação.",
     "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente novamente.",
     "auth/network-request-failed": "Sem conexão com a internet.",
     "auth/popup-closed-by-user": "A janela de login foi fechada antes da conclusão.",

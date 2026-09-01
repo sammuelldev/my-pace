@@ -1,29 +1,44 @@
 import { LEGACY_BACKUP_KEY, SCHEMA_VERSION, STORAGE_KEY, hasMeaningfulData, normalizeState, touchState } from "./schema.js";
 
+const LEGACY_CLAIM_KEY = "mypace-legacy-data-claimed-by";
+
+export function userStorageKey(uid) {
+  return `mypace-user-${String(uid || "anonymous").replace(/[^a-zA-Z0-9_-]/g, "")}-v4`;
+}
+
 function parseJSON(value) {
   try { return value ? JSON.parse(value) : null; }
   catch (_) { return null; }
 }
 
-export function loadLocalState(storage = globalThis.localStorage) {
-  const raw = parseJSON(storage?.getItem(STORAGE_KEY));
+export function loadLocalState(storage = globalThis.localStorage, key = STORAGE_KEY) {
+  const raw = parseJSON(storage?.getItem(key));
   if (!raw) return normalizeState(null);
   const sourceVersion = Number(raw.schemaVersion || raw.version || 1);
-  if (sourceVersion < SCHEMA_VERSION && !storage.getItem(LEGACY_BACKUP_KEY)) {
+  if (key === STORAGE_KEY && sourceVersion < SCHEMA_VERSION && !storage.getItem(LEGACY_BACKUP_KEY)) {
     storage.setItem(LEGACY_BACKUP_KEY, JSON.stringify({ backedUpAt: new Date().toISOString(), sourceVersion, state: raw }));
   }
   const migrated = normalizeState(raw);
   if (sourceVersion < SCHEMA_VERSION) {
     migrated.meta.legacyBackupCreated = true;
-    storage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+    storage.setItem(key, JSON.stringify(migrated));
   }
   return migrated;
 }
 
-export function saveLocalState(state, storage = globalThis.localStorage) {
+export function saveLocalState(state, storage = globalThis.localStorage, key = STORAGE_KEY) {
   const saved = touchState(state);
-  storage?.setItem(STORAGE_KEY, JSON.stringify(saved));
+  storage?.setItem(key, JSON.stringify(saved));
   return saved;
+}
+
+export function claimLegacyStateForUser(uid, storage = globalThis.localStorage) {
+  const claimant = storage?.getItem(LEGACY_CLAIM_KEY);
+  if (claimant && claimant !== uid) return null;
+  const legacy = loadLocalState(storage, STORAGE_KEY);
+  if (!hasMeaningfulData(legacy)) return null;
+  storage?.setItem(LEGACY_CLAIM_KEY, uid);
+  return legacy;
 }
 
 function mergeById(remoteItems = [], localItems = []) {
