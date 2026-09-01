@@ -13,6 +13,24 @@ test("todos os IDs HTML são únicos", () => {
   assert.deepEqual(duplicates, []);
 });
 
+test("login e identidade visual usam a nova marca sem elementos removidos", () => {
+  const html = readFileSync("index.html", "utf8");
+  const app = readFileSync("js/app.js", "utf8");
+  assert.doesNotMatch(html, /MY PACE 2\.0|auth-orbit|auth-benefits|loading-ring/);
+  assert.match(html, /dual-dot-loader/);
+  assert.match(html, /assets\/mypace-runner\.png/);
+  assert.equal(existsSync("assets/mypace-runner.png"), true);
+  assert.equal(existsSync("assets/mypace-runner-icon.png"), true);
+  assert.doesNotMatch(app, /PLANEJADO/);
+});
+
+test("onboarding limita o diálogo ao viewport e ocupa a tela no celular", () => {
+  const css = readFileSync("css/styles.css", "utf8");
+  assert.match(css, /\.onboarding-modal\{width:min\(calc\(100vw - 32px\),820px\)/);
+  assert.match(css, /\.onboarding-modal\{width:100vw;height:100dvh/);
+  assert.match(css, /\.onboarding-step\{[^}]*overflow-y:auto/);
+});
+
 test("service worker referencia apenas arquivos existentes do app shell", () => {
   const worker = readFileSync("service-worker.js", "utf8");
   const shellBlock = worker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || "";

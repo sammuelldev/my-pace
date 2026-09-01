@@ -1,10 +1,11 @@
-const CACHE_NAME = "mypace-shell-v2";
+const CACHE_NAME = "mypace-shell-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./css/styles.css",
   "./manifest.webmanifest",
-  "./assets/favicon.svg",
+  "./assets/mypace-runner.png",
+  "./assets/mypace-runner-icon.png",
   "./assets/og-pace.png",
   "./js/app.js",
   "./js/cloud.js",
