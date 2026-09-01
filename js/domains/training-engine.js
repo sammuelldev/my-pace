@@ -26,6 +26,13 @@ function activeRace(state) {
   return (state.races || []).filter(race => race.status === "planned").sort((a, b) => a.date.localeCompare(b.date))[0] || null;
 }
 
+function postRaceWorkoutId(state, sessionDate) {
+  const gaps = (state.races || []).filter(item => item.status === "completed" && item.result).map(item => daysBetween(item.date, sessionDate)).filter(gap => gap >= 0 && gap <= 5);
+  if (!gaps.length) return null;
+  const nearest = Math.min(...gaps);
+  return nearest <= 2 ? "recovery-run" : "easy-run";
+}
+
 function latestFeedbackByDate(state) {
   const map = new Map();
   [...(state.recommendationFeedback || [])].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))).forEach(item => {
@@ -119,6 +126,7 @@ export function createAdaptiveTrainingPlan(state, now = new Date()) {
         return gap > 0 && gap <= 7;
       });
       let workoutId = selectWorkoutId({ day: cursor.getDay(), days: trainingDays, week, model, race, daysToRace, missedRecently, testEligible });
+      workoutId = postRaceWorkoutId(state, date) || workoutId;
       const decision = feedback.get(date);
       if (decision?.action === "missed") { cursor = addDays(cursor, 1); continue; }
       if (decision?.action === "substituted" && decision.replacementWorkoutId) workoutId = decision.replacementWorkoutId;

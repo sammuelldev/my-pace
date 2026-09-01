@@ -95,6 +95,8 @@ export function normalizeRace(item) {
     officialSeconds: Number(item.result.officialSeconds), distance: Number(item.result.distance || item.distance),
     placement: item.result.placement ? Number(item.result.placement) : null, bib: cleanString(item.result.bib, 20),
     feeling: cleanString(item.result.feeling, 40), weather: cleanString(item.result.weather, 60),
+    rpe: clamp(Number(item.result.rpe) || 8, 1, 10),
+    recoveryNeed: ["low", "normal", "high", "very-high"].includes(item.result.recoveryNeed) ? item.result.recoveryNeed : "normal",
     splits: Array.isArray(item.result.splits) ? item.result.splits.map(Number).filter(value => value > 0 && value < 3600).slice(0, 100) : [],
     shoe: cleanString(item.result.shoe, 100), notes: cleanString(item.result.notes, 800)
   } : null;

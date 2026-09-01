@@ -27,6 +27,7 @@ import { buildAthleteModel } from "./domains/pace-engine.js";
 import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitutions } from "./domains/training-engine.js";
 import { createNutritionFeedback, nutritionRecommendations } from "./domains/nutrition-engine.js";
 import { buildProgressInsights, reconcileAchievements } from "./domains/progress-engine.js";
+import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js";
 
 (() => {
   "use strict";
@@ -203,6 +204,10 @@ import { buildProgressInsights, reconcileAchievements } from "./domains/progress
     const workoutTitle = $("#workoutForm h2"); if (workoutTitle) workoutTitle.id = "workoutModalTitle";
     const workoutSubmit = $('#workoutForm button[type="submit"]'); if (workoutSubmit) workoutSubmit.id = "workoutSubmit";
 
+    const raceActions = $(".race-active-actions");
+    raceActions?.insertAdjacentHTML("afterend", '<article class="race-week-banner" id="raceWeekBanner" hidden></article><article class="panel race-readiness-panel" id="raceReadiness"></article>');
+    $("#raceHistoryMetrics")?.insertAdjacentHTML("afterend", '<div class="post-race-insight" id="postRaceInsight"></div>');
+
     $$(".checklist input").forEach((input, index) => { input.dataset.checkItem = String(index); });
   }
 
@@ -319,6 +324,19 @@ import { buildProgressInsights, reconcileAchievements } from "./domains/progress
       { label: `A PARTIR DO KM ${finishStart}`, text: "Sustentar; progredir apenas se houver domínio do esforço" },
       { label: "FINAL", text: "Usar a reserva sem desmontar a passada" }
     ];
+  }
+
+  function renderRaceExperience() {
+    const experience = buildRaceExperience(state);
+    const readiness = $("#raceReadiness");
+    const banner = $("#raceWeekBanner");
+    if (!readiness || !banner) return;
+    readiness.hidden = !experience.active;
+    banner.hidden = !experience.active || !experience.raceWeek;
+    if (!experience.active) return;
+    const levelClass = experience.score >= 75 ? "high" : experience.score >= 48 ? "moderate" : "low";
+    readiness.innerHTML = `<div><span class="eyebrow">PRONTIDÃO PARA A PROVA</span><h3>${escapeHTML(experience.level)}</h3><p>${escapeHTML(experience.guidance)}</p><div class="race-readiness-factors">${experience.factors.map(item => `<span>${escapeHTML(item)}</span>`).join("")}</div></div><div class="race-readiness-score ${levelClass}"><strong>${experience.score}%</strong><small>confiança ${escapeHTML(experience.confidence.level)}</small><i style="width:${experience.checklist.percent}%"></i><em>${experience.checklist.checked}/${experience.checklist.total} itens do checklist</em></div>`;
+    if (experience.raceWeek) banner.innerHTML = `<span>SEMANA DA PROVA</span><strong>${experience.daysToRace === 0 ? "A largada é hoje" : `${experience.daysToRace} ${experience.daysToRace === 1 ? "dia" : "dias"}: preservar vale mais do que testar`}</strong><small>O volume foi reduzido automaticamente; mantenha apenas rotinas já conhecidas.</small>`;
   }
 
   function renderNextWorkout() {
@@ -589,6 +607,8 @@ import { buildProgressInsights, reconcileAchievements } from "./domains/progress
       ["Meta", selected.goalSeconds ? `${goalDiff <= 0 ? "−" : "+"}${durationLabel(Math.abs(goalDiff))}` : "Sem meta"],
       ["Colocação", result.placement ? `${result.placement}º geral` : "Não informada"]
     ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
+    const postRace = analyzeRaceResult(selected);
+    $("#postRaceInsight").innerHTML = postRace ? `<div><span class="eyebrow red">LEITURA PÓS-PROVA</span><h4>${escapeHTML(postRace.pacing)}</h4><p>${escapeHTML(postRace.recovery)}</p><small>${escapeHTML(postRace.feedbackPrompt)} · Motor v${postRace.engineVersion}</small></div>` : "";
     lineChart($("#raceEvolutionChart"), races, race => race.result.officialSeconds / race.result.distance, paceLabel, "race-evolution", "#ff4d5f", true);
     splitChart($("#raceSplitsChart"), selected);
   }
@@ -632,6 +652,7 @@ import { buildProgressInsights, reconcileAchievements } from "./domains/progress
     applyAvatar();
     renderGreeting();
     renderRace();
+    renderRaceExperience();
     renderNextWorkout();
     renderReadiness();
     renderMetrics();
@@ -1017,7 +1038,7 @@ import { buildProgressInsights, reconcileAchievements } from "./domains/progress
       if (!race || !officialSeconds) { showToast("Confira o tempo oficial."); return; }
       const splitValues = String(form.get("splits") || "").split(",").map(value => value.trim()).filter(Boolean); const splits = splitValues.map(parseDuration);
       if (splits.some(value => !value)) { showToast("Confira as parciais. Use valores como 5:30, 5:28, 5:25."); return; }
-      race.status = "completed"; race.result = { officialSeconds, distance: Number(form.get("distance")), placement: form.get("placement") ? Number(form.get("placement")) : null, bib: String(form.get("bib") || ""), feeling: String(form.get("feeling") || ""), weather: String(form.get("weather") || ""), splits, shoe: String(form.get("shoe") || ""), notes: String(form.get("notes") || "") };
+      race.status = "completed"; race.result = { officialSeconds, distance: Number(form.get("distance")), placement: form.get("placement") ? Number(form.get("placement")) : null, bib: String(form.get("bib") || ""), feeling: String(form.get("feeling") || ""), rpe: Number(form.get("rpe")) || 8, recoveryNeed: String(form.get("recoveryNeed") || "normal"), weather: String(form.get("weather") || ""), splits, shoe: String(form.get("shoe") || ""), notes: String(form.get("notes") || "") };
       selectedRaceHistory = race.id; saveState("Resultado oficial salvo no histórico de provas."); $("#raceResultModal").close(); renderAll(); navigate("historico");
     });
 
@@ -1084,6 +1105,7 @@ import { buildProgressInsights, reconcileAchievements } from "./domains/progress
       state.raceChecklist[race.id] ||= {};
       state.raceChecklist[race.id][event.target.dataset.checkItem] = event.target.checked;
       saveState();
+      renderRaceExperience();
     }));
 
     $("#exportData").addEventListener("click", () => { const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `pace-backup-${localISO()}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); showToast("Backup exportado."); });
