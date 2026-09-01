@@ -10,11 +10,79 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
-    match /users/{userId} {
-      allow create: if owns(userId);
-      allow read, update, delete: if owns(userId);
+    function isNumber(value) {
+      return value is int || value is float;
+    }
 
-      match /{document=**} {
+    function validUserRoot(data) {
+      return data.schemaVersion is int
+        && data.schemaVersion >= 4
+        && data.profile is map
+        && data.settings is map
+        && data.onboarding is map;
+    }
+
+    match /users/{userId} {
+      allow create, update: if owns(userId) && validUserRoot(request.resource.data);
+      allow read, delete: if owns(userId);
+
+      match /workouts/{workoutId} {
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.id == workoutId
+          && request.resource.data.date is string
+          && isNumber(request.resource.data.distance)
+          && request.resource.data.distance > 0
+          && request.resource.data.distance <= 300
+          && isNumber(request.resource.data.durationSeconds)
+          && request.resource.data.durationSeconds > 0
+          && request.resource.data.durationSeconds <= 172800;
+      }
+
+      match /readiness/{date} {
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.date == date
+          && request.resource.data.sleep is int
+          && request.resource.data.sleep >= 1
+          && request.resource.data.sleep <= 5
+          && request.resource.data.energy is int
+          && request.resource.data.energy >= 1
+          && request.resource.data.energy <= 5
+          && request.resource.data.soreness is int
+          && request.resource.data.soreness >= 1
+          && request.resource.data.soreness <= 5;
+      }
+
+      match /bodyMetrics/{metricId} {
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.id == metricId
+          && request.resource.data.type == "weight"
+          && isNumber(request.resource.data.weight)
+          && request.resource.data.weight >= 30
+          && request.resource.data.weight <= 250;
+      }
+
+      match /journal/{entryId} {
+        allow read, delete: if owns(userId);
+        allow create, update: if owns(userId)
+          && request.resource.data.id == entryId
+          && request.resource.data.date is string
+          && request.resource.data.note is string
+          && request.resource.data.note.size() > 0
+          && request.resource.data.note.size() <= 1000;
+      }
+
+      match /{privateCollection}/{documentId} {
+        allow read, write: if owns(userId)
+          && privateCollection in [
+            "races", "equipment", "nutritionHistory",
+            "recommendationFeedback", "achievements"
+          ];
+      }
+
+      match /pace/{legacyDocument} {
         allow read, write: if owns(userId);
       }
     }

@@ -1,37 +1,104 @@
-# Pace — experiência adaptativa em HTML, CSS e JavaScript
+# MyPace 2.0
 
-Esta pasta contém uma versão portátil do painel Pace, sem framework, servidor ou etapa de compilação.
+Aplicação web multiusuário para corrida, construída em HTML, CSS e JavaScript modular. O MyPace combina o perfil declarado no onboarding com dados observados nos treinos para produzir recomendações determinísticas, conservadoras e explicáveis.
 
-## Arquivos
+## O que existe
 
-- `index.html`: estrutura e conteúdo do site.
-- `css/styles.css`: visual premium azul, responsividade e animações.
-- `js/app.js`: registros, plano adaptativo, alimentação dinâmica, provas, métricas, gráficos, perfil, foto e backup.
-- `js/cloud.js`: login e sincronização com o Firestore.
-- `js/firebase-config.js`: conexão com o seu projeto Firebase.
-- `firebase/firestore.rules`: regras privadas do banco.
-- `CONFIGURAR-FIREBASE.md`: guia completo de ativação.
-- `assets/favicon.svg`: ícone da aba do navegador.
+- cadastro por e-mail/senha, login Google e recuperação de senha;
+- painel privado, isolado por usuário no Firebase;
+- onboarding progressivo com histórico, disponibilidade, objetivos, prova, segurança e alimentação;
+- calendário adaptativo, check-in de prontidão, RPE, treinos perdidos e substituições;
+- biblioteca de refeições filtrada por padrão alimentar, alergias, restrições e feedback;
+- revisão semanal, recordes, conquistas, estimativa conservadora, linha do tempo e diário;
+- preparação, semana da prova, resultado e leitura pós-prova;
+- backup JSON, exclusão de conta, temas, PWA leve e funcionamento local durante falhas de rede.
 
-## Como abrir
+## Executar localmente
 
-Para testar no computador, use a extensão **Live Server** do VS Code. Para publicar, envie o conteúdo desta pasta para a raiz de uma hospedagem estática, como GitHub Pages, Netlify ou Cloudflare Pages. O arquivo inicial deve continuar se chamando `index.html`.
+Não há compilação. Sirva a pasta por HTTP para que módulos ES e o service worker funcionem:
 
-## Dados e foto de perfil
+```powershell
+python -m http.server 4173
+```
 
-Antes de configurar o Firebase, os treinos, pesos, equipamentos, nome e foto ficam no `localStorage` do navegador. A foto é recortada, reduzida para 480 × 480 px e comprimida antes de ser salva.
+Abra `http://localhost:4173`. Para executar os testes:
 
-Depois de configurar o Firebase e entrar na conta, os dados locais são migrados no primeiro acesso e passam a ser sincronizados pelo Firestore. O backup manual continua disponível.
+```powershell
+npm test
+```
 
-## Experiência adaptativa
+Abrir `index.html` diretamente pode limitar módulos, autenticação e PWA. Live Server do VS Code também funciona.
 
-- O ciclo de competição só aparece quando existe uma prova agendada.
-- Nome, data, distância, local e meta de tempo da próxima prova podem ser alterados.
-- Os próximos treinos são recalculados usando distância e pace dos registros recentes.
-- O foco alimentar de cada dia acompanha o tipo de treino previsto.
-- No dia da prova — ou depois, enquanto o resultado estiver pendente — aparece o formulário de resultado oficial.
-- Provas concluídas ficam separadas em vermelho, com análise de pace, evolução entre competições e gráfico de parciais.
+## Arquitetura
+
+```text
+index.html
+css/styles.css
+js/
+  app.js                       # shell e orquestração da interface
+  cloud.js                     # Auth e Firestore
+  core/
+    schema.js                  # schema v4 e normalização
+    storage.js                 # cache por uid, backup e merge
+  data/                        # conteúdo compartilhado versionado
+  domains/                     # motores puros e testáveis
+firebase/firestore.rules
+manifest.webmanifest
+service-worker.js
+tests/
+```
+
+Detalhes e decisões estão em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+
+## Estado e Firestore
+
+O schema atual é `4`. Perfil, preferências e onboarding ficam em `users/{uid}`. Dados de maior crescimento usam subcoleções:
+
+```text
+users/{uid}/workouts/{id}
+users/{uid}/races/{id}
+users/{uid}/bodyMetrics/{id}
+users/{uid}/readiness/{date}
+users/{uid}/equipment/{id}
+users/{uid}/nutritionHistory/{id}
+users/{uid}/recommendationFeedback/{id}
+users/{uid}/achievements/{id}
+users/{uid}/journal/{id}
+```
+
+Gravações são comparadas com o último snapshot e apenas documentos alterados são enviados. As regras Firestore limitam cada pessoa ao próprio `uid`; bibliotecas compartilhadas são somente leitura.
+
+## Migração e segurança dos dados
+
+- O payload antigo continua sendo lido pela chave `pace-dashboard-portable-v1`.
+- Antes da conversão, é criado o backup `mypace-legacy-v3-backup`.
+- O primeiro usuário que reivindica dados locais recebe um cache separado por `uid`.
+- O documento legado `users/{uid}/pace/dashboard` é lido como fallback e não é apagado automaticamente.
+- Merge local/nuvem combina coleções por ID e data de atualização; nuvem mais nova não é substituída cegamente.
+- Exportação e importação continuam compatíveis com o estado completo.
+
+## Pace Engine
+
+Os motores não usam IA generativa nem respostas aleatórias. Eles recebem estado normalizado e retornam resultados reproduzíveis com:
+
+- `reasonCodes`;
+- `sourceRuleIds`;
+- versão do motor;
+- nível e motivos de confiança;
+- explicações em português.
+
+O perfil declarado orienta o começo. Depois de uma amostra mínima, o perfil observado passa a ter mais peso. Estimativas só aparecem com dados suficientes e sempre como faixa. Fontes revisadas ficam em `js/data/research-sources.js`; políticas conservadoras internas são identificadas como tais.
 
 ## Firebase
 
-Siga `CONFIGURAR-FIREBASE.md`. A integração usa Authentication por e-mail/senha e Firestore. A foto comprimida também fica no documento privado do Firestore, evitando a exigência atual de plano pago do Cloud Storage.
+Siga [`CONFIGURAR-FIREBASE.md`](CONFIGURAR-FIREBASE.md). O arquivo `js/firebase-config.js` contém apenas a configuração pública do aplicativo Web. Nunca adicione conta de serviço, chave privada ou segredo administrativo ao repositório.
+
+## Publicação oficial no GitHub
+
+O GitHub é a fonte oficial. O workflow `.github/workflows/pages.yml` testa e publica a raiz estática a cada push na branch `main`.
+
+No repositório, abra **Settings → Pages → Source** e selecione **GitHub Actions** uma única vez. Depois disso, commits enviados para `main` atualizam o site automaticamente.
+
+## Limites do produto
+
+O MyPace organiza informações gerais de treino e alimentação; não diagnostica, prescreve tratamento nem substitui médico, fisioterapeuta ou nutricionista. Sinais de alerta e dor forte ou crescente prevalecem sobre qualquer recomendação do aplicativo.

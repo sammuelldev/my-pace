@@ -41,6 +41,15 @@ export function claimLegacyStateForUser(uid, storage = globalThis.localStorage) 
   return legacy;
 }
 
+export function clearUserLocalData(uid, storage = globalThis.localStorage) {
+  storage?.removeItem(userStorageKey(uid));
+  if (storage?.getItem(LEGACY_CLAIM_KEY) === uid) {
+    storage.removeItem(LEGACY_CLAIM_KEY);
+    storage.removeItem(STORAGE_KEY);
+    storage.removeItem(LEGACY_BACKUP_KEY);
+  }
+}
+
 function mergeById(remoteItems = [], localItems = []) {
   const merged = new Map();
   [...remoteItems, ...localItems].forEach(item => {

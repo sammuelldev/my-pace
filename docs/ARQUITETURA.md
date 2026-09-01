@@ -16,8 +16,14 @@ js/
   core/
     schema.js                # schema v4, normalização e migrações
     storage.js               # localStorage, backup legado e merge
-  domains/                   # modelos e regras de negócio
-  data/                      # bibliotecas estáticas compartilhadas
+  domains/
+    pace-engine.js           # perfil declarado/observado e confiança
+    training-engine.js       # calendário, prontidão e substituições
+    nutrition-engine.js      # filtros, opções e feedback alimentar
+    progress-engine.js       # revisão, recordes, score e conquistas
+    race-engine.js           # prontidão e análise pós-prova
+    onboarding.js            # progresso e aplicação das etapas
+  data/                      # bibliotecas e fontes estáticas versionadas
   cloud.js                   # autenticação e persistência Firebase
 ```
 
@@ -44,6 +50,12 @@ users/{uid}/journal/{id}
 
 O documento raiz guarda apenas perfil, preferências, onboarding e metadados. Bibliotecas compartilhadas permanecem no código para funcionar offline, evitar leituras repetidas e permitir revisão por Git.
 
+O cache local também é separado por `uid`. Estado de interface (view ativa, modal e seleção do plano) não é enviado ao Firestore. Plano, perfil observado, score e tendências são derivados novamente a partir dos registros.
+
 ## Migração
 
 Estados anteriores são normalizados de forma idempotente para a versão 4. Antes da primeira conversão, o navegador cria `mypace-legacy-v3-backup`. O documento legado `users/{uid}/pace/dashboard` continua disponível como fonte somente durante a migração; ele não é apagado automaticamente.
+
+## Entrega
+
+O repositório GitHub é a fonte oficial. O site é publicado diretamente da raiz por GitHub Actions; não existe uma cópia `dist` ou configuração de hospedagem independente.

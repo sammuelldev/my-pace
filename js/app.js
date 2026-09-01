@@ -1,5 +1,6 @@
 import {
   createCloudAccount,
+  deleteCloudAccount,
   firebaseIsConfigured,
   friendlyFirebaseError,
   initializeCloud,
@@ -21,7 +22,7 @@ import {
   normalizeState,
   normalizeWorkout
 } from "./core/schema.js";
-import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocalState, userStorageKey } from "./core/storage.js";
+import { claimLegacyStateForUser, clearUserLocalData, loadLocalState, mergeLocalAndRemote, saveLocalState, userStorageKey } from "./core/storage.js";
 import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingInitialValues, onboardingStep } from "./domains/onboarding.js";
 import { buildAthleteModel } from "./domains/pace-engine.js";
 import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitutions } from "./domains/training-engine.js";
@@ -206,6 +207,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       preferencesButton.innerHTML = '<span>◎</span><div><strong>Meta e aparência</strong><small id="preferencesSummary">Meta adaptativa · tema do sistema</small></div><b>›</b>';
       oldPlanSetting.replaceWith(preferencesButton);
     }
+    $("#configuracoes")?.insertAdjacentHTML("beforeend", '<article class="panel account-details"><div><span class="eyebrow">CONTA</span><h3 id="accountEmail">Conta autenticada</h3><p>Seus dados privados usam o identificador da sua conta e não são compartilhados com outros usuários.</p></div><button class="button" type="button" id="openDeleteAccount">Gerenciar conta</button></article><article class="panel danger-zone"><div><span class="eyebrow">ZONA DE PERIGO</span><h3>Excluir conta e dados</h3><p>Remove perfil, treinos, provas, métricas, diário e histórico da nuvem. Exporte um backup antes se quiser guardar uma cópia.</p></div><button class="button danger-button" type="button" id="deleteAccountButton">Excluir minha conta</button></article>');
+    document.body.insertAdjacentHTML("beforeend", '<dialog class="modal" id="deleteAccountModal"><form class="modal-card" id="deleteAccountForm"><button class="modal-close" type="button" data-close aria-label="Fechar">&times;</button><span class="eyebrow red">EXCLUSÃO PERMANENTE</span><h2>Excluir conta e todos os dados?</h2><p class="muted">Esta ação apaga os dados privados do Firestore e o cache desta conta neste navegador. Exporte um backup antes de continuar.</p><label>Senha atual <small>Contas Google confirmarão em uma janela segura.</small><input name="password" type="password" autocomplete="current-password" placeholder="Necessária para conta com e-mail"></label><label>Digite <strong>EXCLUIR</strong> para confirmar<input name="confirmation" autocomplete="off" required placeholder="EXCLUIR"></label><p class="form-message" id="deleteAccountMessage" role="alert"></p><button class="button danger-button full" type="submit">Excluir definitivamente</button></form></dialog>');
 
     const workoutForm = $("#workoutForm");
     workoutForm?.insertAdjacentHTML("afterbegin", '<input name="workoutId" type="hidden">');
@@ -918,6 +921,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     };
     const values = modes[mode] || modes.local;
     $("#cloudStatus").textContent = values[0]; $("#cloudStatusDetail").textContent = values[1]; $("#cloudCardTitle").textContent = values[2]; $("#cloudCardText").textContent = values[3];
+    const accountEmail = $("#accountEmail"); if (accountEmail) accountEmail.textContent = cloudUser?.email || "Conta autenticada";
     $("#cloudAction").textContent = mode === "online" || mode === "saving" ? "Conta conectada" : "Entrar na nuvem"; $("#cloudAction").disabled = ["connecting", "saving", "online"].includes(mode); $("#cloudSignOut").hidden = !["online", "saving"].includes(mode) && !(mode === "error" && cloudUser);
     const syncLabel = mode === "online" ? "Sincronizado na nuvem" : ["connecting", "saving"].includes(mode) ? "Sincronizando…" : mode === "error" ? "Falha ao sincronizar" : "Salvo neste dispositivo";
     const desktopSync = $("#desktopSync");
@@ -1020,6 +1024,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     $("#mobileMore").addEventListener("click", () => { $("#sidebar").classList.add("open"); $("#menuButton").setAttribute("aria-expanded", "true"); $(".sidebar-scrim").hidden = false; });
     $(".sidebar-scrim").addEventListener("click", () => { $("#sidebar").classList.remove("open"); $("#menuButton").setAttribute("aria-expanded", "false"); $(".sidebar-scrim").hidden = true; });
     $("#openProfile").addEventListener("click", openProfileModal); $("#settingsProfile").addEventListener("click", openProfileModal);
+    $("#openDeleteAccount").addEventListener("click", openProfileModal);
+    $("#deleteAccountButton").addEventListener("click", () => { $("#deleteAccountForm").reset(); $("#deleteAccountMessage").textContent = ""; $("#deleteAccountModal").showModal(); });
     $("#choosePhoto").addEventListener("click", () => $("#profilePhotoInput").click()); $("#changePhoto").addEventListener("click", () => $("#profilePhotoInput").click());
     $("#profilePhotoInput").addEventListener("change", event => handlePhoto(event.target.files[0])); $("#profileNameInput").addEventListener("input", event => applyAvatar(pendingPhoto, event.target.value)); $("#removePhoto").addEventListener("click", () => { pendingPhoto = null; applyAvatar(null, $("#profileNameInput").value); });
     $("#historySearch").addEventListener("input", renderHistory); $("#historyType").addEventListener("change", renderHistory); $("#historyPeriod").addEventListener("change", renderHistory); $("#raceHistorySelect").addEventListener("change", event => { selectedRaceHistory = event.target.value; renderRaceHistory(); });
@@ -1069,6 +1075,21 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       if (!note) { showToast("Escreva uma nota antes de salvar."); return; }
       state.journal.push({ id: uid(), date: String(form.get("date") || localISO()), mood: String(form.get("mood") || "neutral"), note: note.slice(0, 600), createdAt: new Date().toISOString() });
       saveState("Nota adicionada à sua jornada."); event.currentTarget.reset(); event.currentTarget.elements.date.value = localISO(); renderAll();
+    });
+    $("#deleteAccountForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget; const data = new FormData(form); const message = $("#deleteAccountMessage");
+      if (String(data.get("confirmation") || "").trim() !== "EXCLUIR") { message.textContent = "Digite EXCLUIR exatamente como mostrado."; return; }
+      if (!cloudUser) { message.textContent = "Sua sessão não está disponível. Entre novamente."; return; }
+      const uidToDelete = cloudUser.uid; const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true; submit.textContent = "Excluindo dados…"; message.textContent = "";
+      try {
+        await deleteCloudAccount(uidToDelete, String(data.get("password") || ""));
+        clearUserLocalData(uidToDelete);
+        activeStorageKey = null;
+        $("#deleteAccountModal").close();
+      } catch (error) { message.textContent = friendlyFirebaseError(error); }
+      finally { submit.disabled = false; submit.textContent = "Excluir definitivamente"; }
     });
 
     $("#readinessForm").addEventListener("submit", event => {

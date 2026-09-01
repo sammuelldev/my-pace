@@ -1,45 +1,99 @@
-# Configurar Firebase no Pace
+# Configurar Firebase no MyPace 2.0
 
-O site funciona normalmente no modo local antes desta configuração. Depois de conectado, ele sincroniza dados e foto entre aparelhos usando uma conta privada.
+Este guia separa o que já está implementado no repositório do que precisa ser habilitado uma única vez no Firebase Console.
 
-## 1. Criar o projeto e o aplicativo Web
+## CODE CHANGE — já implementado
 
-1. Acesse `https://console.firebase.google.com/` e crie um projeto.
-2. Na página inicial do projeto, clique no ícone **Web** (`</>`).
-3. Dê o nome `Pace` ao aplicativo e conclua o cadastro.
-4. O Firebase mostrará um objeto chamado `firebaseConfig`.
-5. Abra `js/firebase-config.js` e substitua os valores de exemplo pelos valores exibidos no console.
+- cadastro e login com e-mail/senha;
+- login Google;
+- recuperação de senha;
+- sessão persistente;
+- dados separados por `uid` e subcoleções;
+- migração do documento antigo e do `localStorage`;
+- regras privadas em `firebase/firestore.rules`;
+- exclusão de conta com reautenticação;
+- publicação estática pelo GitHub Pages.
 
-## 2. Criar seu login privado
+## MANUAL FIREBASE CONSOLE STEP 1 — aplicativo Web
 
-1. No menu do Firebase, abra **Authentication**.
-2. Clique em **Começar**.
-3. Em **Método de login**, habilite **E-mail/senha**.
-4. Abra a aba **Usuários** e clique em **Adicionar usuário**.
-5. Cadastre seu e-mail e uma senha forte. Não é necessário criar cadastro público no site.
+1. Abra [Firebase Console](https://console.firebase.google.com/) e selecione ou crie o projeto.
+2. Em **Visão geral do projeto**, adicione um aplicativo **Web** (`</>`).
+3. Copie somente o objeto público `firebaseConfig`.
+4. Atualize `js/firebase-config.js` com esses valores.
 
-## 3. Criar o Firestore
+O `firebaseConfig` público pode ser versionado. Não use credenciais de conta de serviço, arquivos JSON administrativos ou chaves privadas no navegador.
 
-1. Abra **Firestore Database** e clique em **Criar banco de dados**.
-2. Escolha uma região próxima dos seus usuários.
-3. Depois da criação, abra a aba **Regras**.
-4. Copie todo o conteúdo de `firebase/firestore.rules`, cole no editor e clique em **Publicar**.
+## MANUAL FIREBASE CONSOLE STEP 2 — Authentication
 
-## 4. Foto de perfil sem plano pago
+1. Abra **Authentication → Sign-in method**.
+2. Habilite **E-mail/senha**.
+3. Habilite **Google**, escolha o e-mail de suporte e salve.
 
-A foto é recortada para 420 × 420 px, comprimida e salva dentro do documento privado do Firestore. Isso evita depender do Cloud Storage, que atualmente exige o plano Blaze com faturamento ativado. Para este painel pessoal, o tamanho da imagem permanece dentro do limite do documento.
+Não crie usuários manualmente: a tela **Criar conta** do MyPace faz isso com segurança.
 
-## 5. Autorizar o endereço do GitHub Pages
+## MANUAL FIREBASE CONSOLE STEP 3 — domínios autorizados
 
-1. Em **Authentication → Configurações → Domínios autorizados**, adicione o domínio usado no GitHub Pages, normalmente `seuusuario.github.io`.
-2. Não inclua `https://`, barras ou o caminho do repositório.
+Em **Authentication → Settings → Authorized domains**, adicione:
 
-## 6. Publicar no GitHub Pages
+- `localhost` para desenvolvimento local;
+- `SEU-USUARIO.github.io` para GitHub Pages.
 
-Envie o conteúdo da pasta `Pace-HTML-CSS-JS` para o repositório. Em **Settings → Pages**, publique a branch principal e mantenha `index.html` na raiz publicada.
+Informe apenas o domínio, sem `https://` e sem `/nome-do-repositorio`.
 
-Ao abrir o painel, vá em **Configurações → Entrar na nuvem**. No primeiro login, se ainda não existir informação na nuvem, os dados que estavam salvos no navegador serão enviados automaticamente. Depois disso, alterações em treinos, peso, equipamentos, perfil e foto serão sincronizadas.
+## MANUAL FIREBASE CONSOLE STEP 4 — Firestore
 
-## Segurança
+1. Abra **Firestore Database → Create database**.
+2. Escolha uma região adequada ao público do projeto.
+3. Não mantenha regras de teste abertas.
 
-O objeto `firebaseConfig` pode aparecer no JavaScript público; ele identifica o projeto, mas não substitui autenticação. A proteção depende das regras do Firestore. Não publique o site com regras abertas como `allow read, write: if true`.
+Para publicar as regras pelo Console:
+
+1. abra **Firestore Database → Rules**;
+2. copie todo o conteúdo de `firebase/firestore.rules`;
+3. clique em **Publish**.
+
+Opcionalmente, com Firebase CLI autenticado:
+
+```powershell
+firebase deploy --only firestore:rules --config firebase/firebase.json
+```
+
+As regras permitem que `users/{uid}` seja acessado apenas pelo mesmo `uid`. Bibliotecas compartilhadas, se futuramente movidas ao Firestore, são somente leitura para usuários autenticados.
+
+## MANUAL GITHUB STEP — GitHub Pages
+
+1. Envie o projeto para o GitHub na branch `main`.
+2. No repositório, abra **Settings → Pages**.
+3. Em **Source**, selecione **GitHub Actions**.
+4. Aguarde o workflow **Test and deploy GitHub Pages** concluir.
+
+O `index.html` fica na raiz. Não é necessário copiar arquivos para `dist` nem usar outra hospedagem.
+
+## Primeiro acesso e migração
+
+Ao entrar pela primeira vez:
+
+- se a conta já tiver dados granulares, eles são carregados;
+- se existir apenas `users/{uid}/pace/dashboard`, ele é migrado;
+- se houver dados locais antigos e a nuvem estiver vazia, eles são associados à primeira conta que os reivindicar;
+- o payload antigo recebe backup antes da conversão.
+
+Nenhum documento legado é apagado automaticamente durante a migração.
+
+## Fotos e limites
+
+A foto é cortada para 420 × 420, comprimida e salva como Data URL no documento privado do perfil. Isso evita Cloud Storage nesta versão. O Firestore limita documentos a aproximadamente 1 MiB, por isso imagens grandes são rejeitadas e comprimidas no navegador.
+
+## Checklist de validação
+
+1. criar uma conta por e-mail;
+2. sair e entrar novamente;
+3. solicitar recuperação de senha;
+4. entrar com Google;
+5. completar onboarding;
+6. registrar um treino e confirmar o documento em `users/{uid}/workouts`;
+7. testar em janela anônima com uma segunda conta e confirmar o isolamento;
+8. conferir o domínio GitHub em **Authorized domains**;
+9. publicar as regras antes de divulgar o site.
+
+Se aparecer `permission-denied`, revise se o usuário está autenticado, se as regras foram publicadas e se os documentos estão dentro de `users/{uid}` correto.

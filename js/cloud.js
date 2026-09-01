@@ -89,8 +89,23 @@ export function currentCloudUser() {
   return auth?.currentUser || null;
 }
 
-export async function deleteCloudAccount(uid) {
-  if (!db || !services || !auth?.currentUser || auth.currentUser.uid !== uid) throw new Error("auth/requires-recent-login");
+export async function deleteCloudAccount(uid, password = "") {
+  if (!db || !services || !auth?.currentUser || auth.currentUser.uid !== uid) {
+    const error = new Error("Sessão inválida."); error.code = "auth/requires-recent-login"; throw error;
+  }
+  const user = auth.currentUser;
+  const providers = user.providerData.map(item => item.providerId);
+  if (providers.includes("password")) {
+    if (!password) { const error = new Error("Senha necessária."); error.code = "auth/missing-password"; throw error; }
+    const credential = services.EmailAuthProvider.credential(user.email, password);
+    await services.reauthenticateWithCredential(user, credential);
+  } else if (providers.includes("google.com")) {
+    const provider = new services.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await services.reauthenticateWithPopup(user, provider);
+  } else {
+    const error = new Error("Provedor não compatível."); error.code = "auth/requires-recent-login"; throw error;
+  }
   const collectionNames = [...Object.values(COLLECTIONS), "readiness", "pace"];
   for (const collectionName of collectionNames) {
     const snapshot = await services.getDocs(services.collection(db, "users", uid, collectionName));
@@ -102,7 +117,7 @@ export async function deleteCloudAccount(uid) {
   }
   await services.deleteDoc(services.doc(db, "users", uid));
   cloudCache.delete(uid);
-  await services.deleteUser(auth.currentUser);
+  await services.deleteUser(user);
 }
 
 function rootDataFromState(state) {
@@ -228,6 +243,7 @@ export function friendlyFirebaseError(error) {
     "auth/email-already-in-use": "Já existe uma conta com este e-mail.",
     "auth/weak-password": "Use uma senha com pelo menos 6 caracteres.",
     "auth/requires-recent-login": "Por segurança, saia e entre novamente antes de excluir a conta.",
+    "auth/missing-password": "Digite sua senha atual para confirmar a exclusão.",
     "auth/user-not-found": "Se este e-mail estiver cadastrado, você receberá as instruções de recuperação.",
     "auth/too-many-requests": "Muitas tentativas. Aguarde um pouco e tente novamente.",
     "auth/network-request-failed": "Sem conexão com a internet.",

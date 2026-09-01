@@ -136,6 +136,49 @@ function normalizeTrainingProfile(input, base) {
   } };
 }
 
+function normalizeNutritionHistory(item) {
+  return {
+    id: cleanString(item?.id, 120) || stableId("nutrition", item),
+    date: validDate(item?.date) ? item.date : todayISO(),
+    slot: cleanString(item?.slot, 30), mealId: cleanString(item?.mealId, 100),
+    action: ["liked", "disliked", "selected"].includes(item?.action) ? item.action : "selected",
+    engineVersion: clamp(Number(item?.engineVersion) || 1, 1, 100),
+    createdAt: cleanString(item?.createdAt, 40) || stableTimestamp(item)
+  };
+}
+
+function normalizeRecommendationFeedback(item) {
+  return {
+    id: cleanString(item?.id, 120) || stableId("feedback", item),
+    recommendationId: cleanString(item?.recommendationId, 160),
+    sessionDate: validDate(item?.sessionDate) ? item.sessionDate : todayISO(),
+    originalWorkoutId: cleanString(item?.originalWorkoutId, 100),
+    action: ["missed", "substituted", "liked", "disliked"].includes(item?.action) ? item.action : "substituted",
+    replacementWorkoutId: cleanString(item?.replacementWorkoutId, 100) || null,
+    reasonCode: cleanString(item?.reasonCode, 100),
+    createdAt: cleanString(item?.createdAt, 40) || stableTimestamp({ date: item?.sessionDate })
+  };
+}
+
+function normalizeAchievement(item) {
+  return {
+    id: cleanString(item?.id, 100) || stableId("achievement", item),
+    name: cleanString(item?.name, 100), description: cleanString(item?.description, 300), icon: cleanString(item?.icon, 8),
+    earnedAt: validDate(item?.earnedAt) ? item.earnedAt : todayISO(),
+    engineVersion: clamp(Number(item?.engineVersion) || 1, 1, 100)
+  };
+}
+
+function normalizeJournalEntry(item) {
+  return {
+    id: cleanString(item?.id, 120) || stableId("journal", item),
+    date: validDate(item?.date) ? item.date : todayISO(),
+    mood: ["good", "neutral", "hard", "rest"].includes(item?.mood) ? item.mood : "neutral",
+    note: cleanString(item?.note, 600),
+    createdAt: cleanString(item?.createdAt, 40) || stableTimestamp(item)
+  };
+}
+
 export function normalizeState(input, now = new Date()) {
   const base = createDefaultState(now);
   if (!input || typeof input !== "object") return base;
@@ -176,10 +219,10 @@ export function normalizeState(input, now = new Date()) {
     races: Array.isArray(input.races) ? input.races.filter(item => item && cleanString(item.name) && Number(item.distance) > 0).map(normalizeRace) : [],
     readiness: input.readiness && typeof input.readiness === "object" ? Object.fromEntries(Object.entries(input.readiness).slice(-90).map(([date, item]) => [String(date).slice(0, 10), normalizeReadiness({ ...item, date: String(date).slice(0, 10) })])) : {},
     raceChecklist: input.raceChecklist && typeof input.raceChecklist === "object" ? input.raceChecklist : {},
-    nutritionHistory: Array.isArray(input.nutritionHistory) ? input.nutritionHistory.slice(-500) : [],
-    recommendationFeedback: Array.isArray(input.recommendationFeedback) ? input.recommendationFeedback.slice(-500) : [],
-    achievements: Array.isArray(input.achievements) ? input.achievements.slice(-200) : [],
-    journal: Array.isArray(input.journal) ? input.journal.slice(-1000) : [],
+    nutritionHistory: Array.isArray(input.nutritionHistory) ? input.nutritionHistory.filter(item => item && typeof item === "object").slice(-500).map(normalizeNutritionHistory) : [],
+    recommendationFeedback: Array.isArray(input.recommendationFeedback) ? input.recommendationFeedback.filter(item => item && typeof item === "object").slice(-500).map(normalizeRecommendationFeedback) : [],
+    achievements: Array.isArray(input.achievements) ? input.achievements.filter(item => item && typeof item === "object").slice(-200).map(normalizeAchievement) : [],
+    journal: Array.isArray(input.journal) ? input.journal.filter(item => item && cleanString(item.note)).slice(-1000).map(normalizeJournalEntry) : [],
     settings: {
       adaptiveGoal: input.settings?.adaptiveGoal !== false,
       weeklyGoal: clamp(Number(input.settings?.weeklyGoal) || 10, 3, 300),
