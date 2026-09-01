@@ -172,12 +172,71 @@
   </dialog>
 
   <dialog class="modal onboarding-modal" id="onboardingModal">
-    <form method="dialog" class="modal-card form-grid" id="onboardingForm">
-      <div class="span-2"><span class="eyebrow">BEM-VINDO AO PACE</span><h2>Vamos ajustar seu ponto de partida</h2><p class="muted">Você poderá alterar tudo depois nas configurações.</p></div>
-      <label class="span-2">Como devemos chamar você?<input name="name" maxlength="40" required placeholder="Seu nome"></label>
-      <label>Objetivo principal<select name="goal"><option value="consistency">Criar consistência</option><option value="5k">Completar ou melhorar 5 km</option><option value="10k">Evoluir para 10 km</option><option value="health">Saúde e bem-estar</option></select></label>
-      <label>Meta inicial (km/semana)<input name="weeklyGoal" type="number" min="3" max="200" step="0.5" value="10"></label>
-      <button class="button primary span-2" type="submit">Começar meu plano</button>
+    <form method="dialog" class="modal-card onboarding-card" id="onboardingForm" novalidate>
+      <div class="onboarding-progress"><span id="onboardingProgressLabel">Etapa 1 de 9</span><div><i id="onboardingProgressBar"></i></div><button class="text-button" type="button" id="onboardingSaveExit">Salvar e continuar depois</button></div>
+      <header class="onboarding-head"><span class="eyebrow" id="onboardingEyebrow">BEM-VINDO AO MY PACE</span><h2 id="onboardingTitle">Vamos conhecer o seu ritmo</h2><p class="muted" id="onboardingSubtitle">Responda no seu tempo. Cada etapa é salva automaticamente.</p></header>
+
+      <section class="onboarding-step" data-onboarding-step="welcome">
+        <div class="welcome-mark">⌁</div><h3>Um plano deve caber na vida real.</h3><p>O MyPace vai combinar o que você nos contar com o que seus treinos mostrarem. Quando houver poucos dados, as sugestões serão mais conservadoras — e sempre explicadas.</p>
+        <div class="onboarding-promises"><span><b>01</b>Você continua no controle</span><span><b>02</b>Feedback muda o plano</span><span><b>03</b>Saúde vem antes da meta</span></div>
+      </section>
+
+      <section class="onboarding-step form-grid" data-onboarding-step="basics" hidden>
+        <label class="span-2">Como devemos chamar você?<input name="name" maxlength="40" required placeholder="Seu nome"></label>
+        <label>Data de nascimento <small>Opcional</small><input name="birthDate" type="date"></label>
+        <label>Cidade <small>Opcional</small><input name="city" maxlength="80" placeholder="Ex.: Fortaleza"></label>
+        <label>Como você se identifica? <small>Opcional</small><select name="gender"><option value="">Prefiro não informar</option><option value="woman">Mulher</option><option value="man">Homem</option><option value="nonbinary">Não binário</option><option value="other">Outro</option></select></label>
+        <label>Altura (cm) <small>Opcional</small><input name="heightCm" type="number" min="100" max="250" placeholder="Ex.: 170"></label>
+        <label>Peso atual (kg) <small>Opcional</small><input name="currentWeight" type="number" min="30" max="250" step="0.1" placeholder="Ex.: 65,5"></label>
+      </section>
+
+      <section class="onboarding-step form-grid" data-onboarding-step="history" hidden>
+        <label class="span-2">Sua relação atual com a corrida<select name="experience"><option value="beginner">Estou começando</option><option value="returning">Estou voltando depois de uma pausa</option><option value="recreational">Corro por lazer com alguma regularidade</option><option value="experienced">Já treino com estrutura e experiência</option></select></label>
+        <label>Há quantos meses corre?<input name="runningMonths" type="number" min="0" max="720" value="0"></label>
+        <label>Volume atual (km/semana)<input name="currentWeeklyKm" type="number" min="0" max="300" step="0.5" placeholder="0 se ainda não corre"></label>
+        <label>Maior corrida recente (km)<input name="longestRunKm" type="number" min="0" max="300" step="0.1" placeholder="Ex.: 5"></label>
+        <label>Pace confortável <small>Opcional</small><input name="typicalPace" inputmode="numeric" pattern="[0-9]+:[0-5][0-9]" placeholder="Ex.: 6:30"></label>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step="availability" hidden>
+        <fieldset class="day-picker"><legend>Em quais dias você pode treinar?</legend><label><input name="trainingDays" type="checkbox" value="1">Seg</label><label><input name="trainingDays" type="checkbox" value="2">Ter</label><label><input name="trainingDays" type="checkbox" value="3">Qua</label><label><input name="trainingDays" type="checkbox" value="4">Qui</label><label><input name="trainingDays" type="checkbox" value="5">Sex</label><label><input name="trainingDays" type="checkbox" value="6">Sáb</label><label><input name="trainingDays" type="checkbox" value="0">Dom</label></fieldset>
+        <div class="form-grid"><label>Tempo por sessão<select name="sessionMinutes"><option value="30">Até 30 minutos</option><option value="45" selected>Até 45 minutos</option><option value="60">Até 1 hora</option><option value="90">Até 1h30</option><option value="120">Até 2 horas</option></select></label><label>Período preferido<select name="preferredTime"><option value="morning">Manhã</option><option value="afternoon">Tarde</option><option value="evening">Noite</option><option value="variable">Varia conforme o dia</option></select></label></div>
+      </section>
+
+      <section class="onboarding-step form-grid" data-onboarding-step="goals" hidden>
+        <label class="span-2">Objetivo principal<select name="primaryGoal"><option value="consistency">Criar consistência</option><option value="5k">Completar ou melhorar 5 km</option><option value="10k">Evoluir para 10 km</option><option value="race">Preparar uma prova</option><option value="performance">Melhorar desempenho</option><option value="health">Saúde e bem-estar</option></select></label>
+        <label>Referência semanal (km)<input name="targetWeeklyKm" type="number" min="3" max="300" step="0.5" value="10"></label>
+        <label class="span-2">Por que isso importa para você? <small>Opcional</small><textarea name="motivation" maxlength="300" placeholder="Ex.: quero terminar meus primeiros 5 km com confiança"></textarea></label>
+      </section>
+
+      <section class="onboarding-step" data-onboarding-step="race" hidden>
+        <label class="toggle-row"><span><strong>Já tenho uma prova em vista</strong><small>Você também pode adicionar uma prova depois.</small></span><input name="hasRace" type="checkbox" id="onboardingHasRace"></label>
+        <div class="form-grid onboarding-race-fields" id="onboardingRaceFields" hidden><label class="span-2">Nome da prova<input name="raceName" maxlength="80" placeholder="Ex.: Corrida da Cidade"></label><label>Data<input name="raceDate" type="date"></label><label>Distância (km)<input name="raceDistance" type="number" min="1" max="300" step="0.1" value="5"></label><label class="span-2">Local <small>Opcional</small><input name="raceLocation" maxlength="80" placeholder="Cidade ou percurso"></label></div>
+      </section>
+
+      <section class="onboarding-step form-grid" data-onboarding-step="safety" hidden>
+        <article class="safety-note span-2"><span>!</span><div><strong>O MyPace não substitui avaliação profissional.</strong><p>Dor forte, crescente, no peito, desmaio ou falta de ar fora do esperado pedem interrupção do treino e orientação adequada.</p></div></article>
+        <label class="span-2">Lesões ou dores recentes <small>Opcional</small><textarea name="recentInjuries" maxlength="500" placeholder="Conte o que pode afetar seus treinos"></textarea></label>
+        <label class="span-2">Outra informação de saúde relevante <small>Opcional</small><textarea name="healthNotes" maxlength="500" placeholder="Use apenas o que se sentir confortável em compartilhar"></textarea></label>
+        <label class="safety-confirm span-2"><input name="safetyConfirmed" type="checkbox">Entendo que devo interromper o exercício e buscar orientação se houver sinais de alerta.</label>
+      </section>
+
+      <section class="onboarding-step form-grid" data-onboarding-step="nutrition" hidden>
+        <label>Padrão alimentar<select name="pattern"><option value="omnivore">Como de tudo</option><option value="vegetarian">Vegetariano</option><option value="vegan">Vegano</option><option value="pescatarian">Pescetariano</option><option value="other">Outro</option></select></label>
+        <label>Refeições por dia<select name="mealsPerDay"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+        <label>Restrições <small>Separe por vírgula</small><input name="restrictions" placeholder="Ex.: sem lactose"></label>
+        <label>Alergias <small>Separe por vírgula</small><input name="allergies" placeholder="Ex.: amendoim"></label>
+        <label>Não gosto de…<input name="dislikes" placeholder="Ex.: mamão, peixe"></label>
+        <label>Gosto e consigo manter…<input name="favorites" placeholder="Ex.: arroz, feijão, banana"></label>
+        <label>Tempo para cozinhar<select name="cookingTime"><option value="low">Quase nenhum</option><option value="medium" selected>Moderado</option><option value="high">Gosto de cozinhar</option></select></label>
+        <label>Faixa de orçamento<select name="budget"><option value="low">Econômico</option><option value="medium" selected>Intermediário</option><option value="high">Flexível</option></select></label>
+        <label class="span-2">Foco alimentar<select name="goal"><option value="performance">Energia e recuperação</option><option value="body-composition">Composição corporal</option><option value="health">Rotina mais saudável</option><option value="practicality">Praticidade</option></select></label>
+      </section>
+
+      <section class="onboarding-step onboarding-finish" data-onboarding-step="finish" hidden><div class="finish-ring">✓</div><h3 id="onboardingFinishName">Tudo pronto.</h3><p>Seu primeiro plano usa o que você declarou. Conforme você registrar treinos e feedback, o perfil observado ganhará mais peso e a confiança das sugestões aumentará.</p><div id="onboardingSummary" class="onboarding-summary"></div></section>
+
+      <p class="form-message" id="onboardingMessage" role="alert" aria-live="polite"></p>
+      <footer class="onboarding-actions"><button class="button" type="button" id="onboardingBack">Voltar</button><button class="button primary" type="submit" id="onboardingNext">Continuar</button></footer>
     </form>
   </dialog>
 </body>

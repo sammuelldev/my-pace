@@ -22,6 +22,7 @@ import {
   normalizeWorkout
 } from "./core/schema.js";
 import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocalState, userStorageKey } from "./core/storage.js";
+import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingInitialValues, onboardingStep } from "./domains/onboarding.js";
 
 (() => {
   "use strict";
@@ -48,6 +49,7 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
   let lastDeletedWorkout = null;
   let activeStorageKey = null;
   let pendingAccountName = "";
+  let onboardingPreparedForUid = null;
 
   function uid() { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`; }
   function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -463,6 +465,12 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
     const themeNames = { system: "tema do sistema", dark: "tema escuro", light: "tema claro" };
     const summary = $("#preferencesSummary");
     if (summary) summary.textContent = `${state.settings.adaptiveGoal ? "Meta adaptativa" : `${numberBR(goal)} km/semana`} · ${themeNames[state.settings.theme]}`;
+    const trainingDaysSummary = $("#trainingDaysSummary");
+    if (trainingDaysSummary) {
+      const names = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      const days = state.trainingProfile.declared.trainingDays.map(day => names[day]).join(" · ");
+      trainingDaysSummary.textContent = days || "Nenhum dia definido";
+    }
   }
 
   function renderRaceChecklist() {
@@ -721,6 +729,75 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
     return true;
   }
 
+  function fillOnboardingForm() {
+    const form = $("#onboardingForm");
+    const values = onboardingInitialValues(state, cloudUser || {});
+    Object.entries(values).forEach(([name, value]) => {
+      const field = form.elements[name];
+      if (!field) return;
+      if (name === "trainingDays") {
+        [...field].forEach(input => { input.checked = value.includes(Number(input.value)); });
+      } else if (field.type === "checkbox") field.checked = Boolean(value);
+      else field.value = value ?? "";
+    });
+    $("#onboardingRaceFields").hidden = !form.elements.hasRace.checked;
+  }
+
+  function onboardingFormValues() {
+    const form = $("#onboardingForm");
+    const data = new FormData(form);
+    return {
+      ...Object.fromEntries(data),
+      trainingDays: data.getAll("trainingDays"),
+      hasRace: form.elements.hasRace.checked,
+      safetyConfirmed: form.elements.safetyConfirmed.checked
+    };
+  }
+
+  function renderOnboarding() {
+    const index = onboardingStep(state);
+    const step = ONBOARDING_STEPS[index];
+    $$("[data-onboarding-step]").forEach(section => { section.hidden = section.dataset.onboardingStep !== step.id; });
+    $("#onboardingEyebrow").textContent = step.eyebrow;
+    $("#onboardingTitle").textContent = step.title;
+    $("#onboardingProgressLabel").textContent = `Etapa ${index + 1} de ${ONBOARDING_STEPS.length}`;
+    $("#onboardingProgressBar").style.width = `${(index + 1) / ONBOARDING_STEPS.length * 100}%`;
+    $("#onboardingBack").hidden = index === 0;
+    $("#onboardingSaveExit").hidden = index === ONBOARDING_STEPS.length - 1;
+    $("#onboardingNext").textContent = index === 0 ? "Começar" : index === ONBOARDING_STEPS.length - 1 ? "Entrar no MyPace" : "Salvar e continuar";
+    $("#onboardingMessage").textContent = "";
+    if (step.id === "finish") {
+      const declared = state.trainingProfile.declared;
+      const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      $("#onboardingFinishName").textContent = `${state.profile.name}, seu ponto de partida está pronto.`;
+      $("#onboardingSummary").innerHTML = [
+        ["Objetivo", { consistency: "Criar consistência", "5k": "5 km", "10k": "10 km", race: "Preparar prova", performance: "Desempenho", health: "Saúde" }[state.goals.primary] || state.goals.primary],
+        ["Disponibilidade", declared.trainingDays.map(day => dayNames[day]).join(" · ") || "A definir"],
+        ["Confiança inicial", state.workouts.length >= 3 ? "Moderada" : "Em construção"]
+      ].map(([label, value]) => `<span>${escapeHTML(label)}<b>${escapeHTML(value)}</b></span>`).join("");
+    }
+  }
+
+  function validateOnboardingStep(stepId, values) {
+    if (stepId === "basics" && !String(values.name || "").trim()) return "Conte como devemos chamar você.";
+    if (stepId === "history" && values.typicalPace && !/^\d{1,2}:[0-5]\d$/.test(values.typicalPace)) return "Use o pace no formato min:seg, por exemplo 6:30.";
+    if (stepId === "availability" && !values.trainingDays.length) return "Escolha pelo menos um dia possível para treinar.";
+    if (stepId === "race" && values.hasRace && (!values.raceName || !values.raceDate)) return "Informe o nome e a data da prova, ou desligue a opção de prova.";
+    if (stepId === "safety" && !values.safetyConfirmed) return "Confirme que entendeu os limites de segurança para continuar.";
+    return "";
+  }
+
+  function openOnboardingIfNeeded() {
+    if (!cloudUser || state.onboarding.completed) return;
+    if (onboardingPreparedForUid !== cloudUser.uid) {
+      fillOnboardingForm();
+      onboardingPreparedForUid = cloudUser.uid;
+    }
+    renderOnboarding();
+    const dialog = $("#onboardingModal");
+    if (!dialog.open) dialog.showModal();
+  }
+
   function setAuthMessage(message = "", success = false) {
     const target = $("#authMessage");
     if (!target) return;
@@ -768,6 +845,7 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
     $("#productApp").hidden = false;
     document.body.classList.add("authenticated");
     renderAll();
+    setTimeout(openOnboardingIfNeeded, 0);
   }
 
   function prepareUserLocalState(user) {
@@ -819,6 +897,8 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
       activeStorageKey = null;
       state = createDefaultState();
       pendingPhoto = null;
+      onboardingPreparedForUid = null;
+      if ($("#onboardingModal")?.open) $("#onboardingModal").close();
       setCloudUI(cloudConfigured ? "signedOut" : "local");
       showSignedOutRoute();
       return;
@@ -958,17 +1038,31 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
       renderAll();
     });
 
+    $("#onboardingHasRace").addEventListener("change", event => { $("#onboardingRaceFields").hidden = !event.target.checked; });
+    $("#onboardingBack").addEventListener("click", () => {
+      state.onboarding.currentStep = Math.max(0, onboardingStep(state) - 1);
+      saveState(); renderOnboarding();
+    });
+    $("#onboardingSaveExit").addEventListener("click", async () => {
+      saveState();
+      $("#onboardingModal").close();
+      await signOutCloud();
+    });
     $("#onboardingForm").addEventListener("submit", event => {
       event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      state.profile.name = String(form.get("name") || "Atleta").trim().slice(0, 40) || "Atleta";
-      state.settings.primaryGoal = String(form.get("goal") || "consistency");
-      state.settings.weeklyGoal = clamp(Number(form.get("weeklyGoal")) || 10, 3, 200);
-      state.settings.adaptiveGoal = false;
-      state.settings.onboarded = true;
-      saveState("Seu ponto de partida foi configurado.");
-      $("#onboardingModal").close();
-      renderAll();
+      const step = ONBOARDING_STEPS[onboardingStep(state)];
+      if (step.id === "finish") {
+        state = completeOnboarding(state);
+        saveState("Perfil inicial concluído. Bem-vindo ao MyPace.");
+        $("#onboardingModal").close();
+        selectedPlan = 0; renderAll();
+        return;
+      }
+      const values = onboardingFormValues();
+      const error = validateOnboardingStep(step.id, values);
+      if (error) { $("#onboardingMessage").textContent = error; return; }
+      state = applyOnboardingStep(state, step.id, values);
+      saveState(); renderAll(); renderOnboarding();
     });
 
     $$(".checklist input[data-check-item]").forEach(input => input.addEventListener("change", event => {
@@ -1008,7 +1102,11 @@ import { claimLegacyStateForUser, loadLocalState, mergeLocalAndRemote, saveLocal
       }, "Enviando…");
     });
 
-    $$("dialog").forEach(dialog => { dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); }); dialog.addEventListener("close", () => { if (dialog.id === "profileModal") renderAll(); }); });
+    $$("dialog").forEach(dialog => {
+      dialog.addEventListener("click", event => { if (event.target === dialog && dialog.id !== "onboardingModal") dialog.close(); });
+      dialog.addEventListener("cancel", event => { if (dialog.id === "onboardingModal" && !state.onboarding.completed) event.preventDefault(); });
+      dialog.addEventListener("close", () => { if (dialog.id === "profileModal") renderAll(); });
+    });
   }
 
   setupEnhancements();
