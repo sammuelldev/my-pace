@@ -26,11 +26,11 @@ import { ONBOARDING_STEPS, applyOnboardingStep, completeOnboarding, onboardingIn
 import { buildAthleteModel } from "./domains/pace-engine.js";
 import { createAdaptiveTrainingPlan, createTrainingDecision, workoutSubstitutions } from "./domains/training-engine.js";
 import { createNutritionFeedback, nutritionRecommendations } from "./domains/nutrition-engine.js";
+import { buildProgressInsights, reconcileAchievements } from "./domains/progress-engine.js";
 
 (() => {
   "use strict";
 
-  const BASELINE_3K_SECONDS = 16 * 60;
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -100,6 +100,7 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
   }
 
   function saveState(message) {
+    state.achievements = reconcileAchievements(state);
     const saved = persistLocal();
     if (message) showToast(message);
     if (saved && cloudUser && !applyingCloud) scheduleCloudSave();
@@ -242,10 +243,10 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
   function stats() {
     const runs = performanceRuns();
     const totalKm = runs.reduce((sum, run) => sum + run.distance, 0);
-    const longest = runs.length ? Math.max(3, ...runs.map(run => run.distance)) : 3;
+    const longest = runs.length ? Math.max(...runs.map(run => run.distance)) : 0;
     const runs3k = runs.filter(run => Math.abs(run.distance - 3) <= 0.1);
     const runs5k = runs.filter(run => Math.abs(run.distance - 5) <= 0.15);
-    return { runs, totalKm, longest, best3k: Math.min(BASELINE_3K_SECONDS, ...runs3k.map(run => run.durationSeconds)), best5k: runs5k.length ? Math.min(...runs5k.map(run => run.durationSeconds)) : null };
+    return { runs, totalKm, longest, best3k: runs3k.length ? Math.min(...runs3k.map(run => run.durationSeconds)) : null, best5k: runs5k.length ? Math.min(...runs5k.map(run => run.durationSeconds)) : null };
   }
 
   function navigate(view) {
@@ -353,7 +354,7 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
     $("#weeklyProgress").style.width = `${clamp(weeklyKm / weeklyGoal * 100, 0, 100)}%`;
     $("#weeklyGoal").textContent = `${state.settings.adaptiveGoal ? "Meta adaptativa" : "Meta pessoal"}: ${numberBR(weeklyGoal)} km`;
     $("#weeklyCount").textContent = `${week.length} ${week.length === 1 ? "treino" : "treinos"}`;
-    $("#best3k").textContent = durationLabel(summary.best3k);
+    $("#best3k").textContent = summary.best3k ? durationLabel(summary.best3k) : "Em construção";
     $("#best5k").textContent = summary.best5k ? durationLabel(summary.best5k) : "Em construção";
     $("#longestRun").textContent = `${numberBR(summary.longest)} km`;
     $("#totalKm").textContent = `${numberBR(summary.totalKm)} km`;
@@ -602,6 +603,29 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
     container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img"><line x1="${px}" y1="${avgY}" x2="${width - px}" y2="${avgY}" stroke="#ff8995" stroke-dasharray="5 5"/><text x="${width - 138}" y="${avgY - 7}" fill="#ff8995">média ${paceShort(average)}</text>${splits.map((split, index) => { const top = y(split); const h = height - py - top; return `<rect x="${px + index * slot + 6}" y="${top}" width="${barWidth}" height="${h}" rx="5" fill="${split === Math.min(...splits) ? "#ff3147" : "#a52f3c"}"><title>Km ${index + 1}: ${paceShort(split)}</title></rect><text x="${px + index * slot + slot / 2}" y="${height - 8}" text-anchor="middle">${index + 1}</text><text x="${px + index * slot + slot / 2}" y="${top - 7}" text-anchor="middle" fill="#ff8995">${paceShort(split)}</text>`; }).join("")}</svg>`;
   }
 
+  function renderProgressIntelligence() {
+    const progress = buildProgressInsights(state);
+    const score = progress.paceScore;
+    $("#paceScore").innerHTML = `<div class="score-ring" style="--score:${score.score * 3.6}deg"><span><b>${score.score}</b><small>de 100</small></span></div><div><span class="eyebrow">MY PACE SCORE</span><h3>${escapeHTML(score.label)}</h3><p>Não é uma nota de saúde. Resume consistência, feedback e qualidade dos dados.</p><div class="score-dimensions">${Object.entries(score.dimensions).map(([key, value]) => `<span>${escapeHTML({ consistency: "constância", feedback: "feedback", data: "dados", continuity: "continuidade" }[key])}<b>${value}</b></span>`).join("")}</div></div>`;
+    const review = progress.weeklyReview;
+    $("#weeklyReview").innerHTML = `<div><span class="eyebrow">REVISÃO DA SEMANA</span><h3>${escapeHTML(review.message)}</h3><p>${dateLabel(review.start)} a ${dateLabel(review.end)} · o objetivo orienta, não pune.</p></div><div class="week-review-metrics"><span><b>${review.sessions}</b>sessões</span><span><b>${numberBR(review.km)}</b>km</span><span><b>${review.adherence}%</b>ritmo planejado</span></div>`;
+    $("#personalRecords").innerHTML = progress.personalRecords.map(record => record.available
+      ? `<article class="record-card"><span>${numberBR(record.distance, record.distance % 1 ? 1 : 0)} KM</span><strong>${durationLabel(record.durationSeconds)}</strong><small>${paceLabel(record.paceSeconds)} · ${dateLabel(record.date)}</small></article>`
+      : `<article class="record-card locked"><span>${numberBR(record.distance, record.distance % 1 ? 1 : 0)} KM</span><strong>Em construção</strong><small>Aparece após uma atividade comparável</small></article>`).join("");
+    const estimate = progress.raceEstimate;
+    $("#raceEstimate").innerHTML = estimate.available
+      ? `<span class="eyebrow">ESTIMATIVA CONSERVADORA</span><h3>${numberBR(estimate.targetDistance, estimate.targetDistance % 1 ? 1 : 0)} km</h3><div class="estimate-range">${durationLabel(estimate.lowSeconds)} <span>até</span> ${durationLabel(estimate.highSeconds)}</div><p class="muted">Faixa heurística baseada em ${estimate.sampleSize} atividades comparáveis. Não é promessa de resultado.</p><div class="estimate-meta"><span>confiança ${escapeHTML(estimate.confidence)}</span><span>motor v${progress.engineVersion}</span></div>`
+      : `<span class="eyebrow">ESTIMATIVA DE PROVA</span><h3>Ainda não há base suficiente</h3><p class="muted">${escapeHTML(estimate.reason)}</p><div class="empty"><b>${estimate.requiredRuns ? `${estimate.requiredRuns} registro(s) restante(s)` : "Distâncias comparáveis necessárias"}</b><small>O MyPace evita estimar quando a incerteza é alta.</small></div>`;
+    $("#achievementList").innerHTML = progress.achievements.length ? [...progress.achievements].reverse().slice(0, 5).map(item => `<div class="achievement-item"><span>${escapeHTML(item.icon)}</span><div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(item.description)}</small></div><time>${escapeHTML(dateLabel(item.earnedAt))}</time></div>`).join("") : '<div class="empty"><b>Primeiro marco a caminho</b><small>Seu primeiro treino registrado libera uma conquista.</small></div>';
+    const typeNames = { workout: "Treino", race: "Prova", body: "Corpo", achievement: "Conquista", journal: "Diário" };
+    $("#journeyTimeline").innerHTML = progress.timeline.length ? progress.timeline.slice(0, 12).map(item => `<article class="timeline-item"><span>${escapeHTML(typeNames[item.type] || item.type)} · ${escapeHTML(dateLabel(item.date))}</span><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.detail)}</small></article>`).join("") : '<div class="empty"><b>Sua linha do tempo começa aqui</b><small>Treinos, notas e conquistas aparecerão em ordem.</small></div>';
+  }
+
+  function renderJournal() {
+    const entries = [...state.journal].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    $("#journalList").innerHTML = entries.length ? entries.slice(0, 8).map(item => `<article class="journal-entry"><span>${escapeHTML(dateLabel(item.date))}</span><p>${escapeHTML(item.note)}</p><button class="text-button danger" type="button" data-delete-journal="${escapeHTML(item.id)}">Excluir</button></article>`).join("") : '<div class="empty"><b>Nenhuma nota ainda</b><small>Use o diário para registrar o contexto que pace e distância não mostram.</small></div>';
+  }
+
   function renderAll() {
     adaptivePlan = buildAdaptivePlan();
     $$(".profile-name").forEach(item => item.textContent = state.profile.name);
@@ -620,6 +644,8 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
     renderRaceHistory();
     renderRaceChecklist();
     renderPreferences();
+    renderProgressIntelligence();
+    renderJournal();
   }
 
   function openProfileModal() { pendingPhoto = state.profile.photo; $("#profileNameInput").value = state.profile.name; applyAvatar(pendingPhoto, state.profile.name); $("#profileModal").showModal(); }
@@ -945,6 +971,8 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
           showToast("Treino excluído e plano recalculado.", { label: "Desfazer", run: () => { if (!lastDeletedWorkout) return; state.workouts.splice(lastDeletedWorkout.index, 0, lastDeletedWorkout.workout); lastDeletedWorkout = null; saveState("Exclusão desfeita."); renderAll(); } });
         }
       }
+      const deleteJournal = event.target.closest("[data-delete-journal]");
+      if (deleteJournal) { state.journal = state.journal.filter(item => item.id !== deleteJournal.dataset.deleteJournal); saveState("Nota removida do diário."); renderAll(); }
       const closeButton = event.target.closest("[data-close]"); if (closeButton) closeButton.closest("dialog")?.close();
     });
 
@@ -995,6 +1023,12 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
 
     $("#shoeForm").addEventListener("submit", event => { event.preventDefault(); const form = new FormData(event.currentTarget); state.equipment.push(normalizeEquipment({ id: uid(), name: form.get("name"), type: form.get("type"), lifespan: form.get("lifespan"), totalKm: 0, planned: false })); saveState("Tênis adicionado à rotação."); event.currentTarget.reset(); $("#shoeModal").close(); renderEquipment(); });
     $("#weightForm").addEventListener("submit", event => { event.preventDefault(); const weight = Number($("#weightInput").value); if (weight < 30 || weight > 250) { showToast("Digite um peso entre 30 e 250 kg."); return; } state.weights.push({ id: uid(), date: localISO(), weight }); saveState("Peso registrado. Alimentação atualizada."); renderAll(); });
+    $("#journalForm").addEventListener("submit", event => {
+      event.preventDefault(); const form = new FormData(event.currentTarget); const note = String(form.get("note") || "").trim();
+      if (!note) { showToast("Escreva uma nota antes de salvar."); return; }
+      state.journal.push({ id: uid(), date: String(form.get("date") || localISO()), mood: String(form.get("mood") || "neutral"), note: note.slice(0, 600), createdAt: new Date().toISOString() });
+      saveState("Nota adicionada à sua jornada."); event.currentTarget.reset(); event.currentTarget.elements.date.value = localISO(); renderAll();
+    });
 
     $("#readinessForm").addEventListener("submit", event => {
       event.preventDefault();
@@ -1092,6 +1126,7 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
   setupEnhancements();
   bindEvents();
   $("#workoutForm [name=date]").value = localISO();
+  $("#journalForm [name=date]").value = localISO();
   renderAll();
   startCloud();
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (state.settings.theme === "system") applyTheme(); });
