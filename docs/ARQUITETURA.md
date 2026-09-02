@@ -1,4 +1,4 @@
-# Arquitetura do MyPace 2.0
+# Arquitetura do MyPace
 
 ## Princípios
 
@@ -19,7 +19,7 @@ js/
   domains/
     pace-engine.js           # perfil declarado/observado e confiança
     training-engine.js       # calendário, prontidão e substituições
-    nutrition-engine.js      # filtros, opções e feedback alimentar
+    nutrition-engine.js      # demanda, slots, filtros, anti-repetição, opções e feedback alimentar
     progress-engine.js       # revisão, recordes, score e conquistas
     race-engine.js           # prontidão e análise pós-prova
     onboarding.js            # progresso e aplicação das etapas

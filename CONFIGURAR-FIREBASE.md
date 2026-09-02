@@ -1,4 +1,4 @@
-# Configurar Firebase no MyPace 2.0
+# Configurar Firebase no MyPace
 
 Este guia separa o que já está implementado no repositório do que precisa ser habilitado uma única vez no Firebase Console.
 

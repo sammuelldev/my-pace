@@ -520,23 +520,38 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     const today = localISO();
     const todaySession = adaptivePlan.find(session => session.date === today);
     const guidance = nutritionRecommendations(state, todaySession, today);
+    if (ensureNutritionPlan(guidance)) saveState();
     const slotMarkup = guidance.slots.map(slot => {
       if (!slot.selected) return `<article class="meal-option empty-meal"><span>${escapeHTML(slot.label)}</span><strong>Sem opção compatível</strong><small>Revise alergias e restrições ou converse com nutricionista.</small></article>`;
-      return `<article class="meal-option"><span>${escapeHTML(slot.label)}</span><strong>${escapeHTML(slot.selected.name)}</strong><small>${escapeHTML(slot.selected.ingredients.join(" · "))}</small><p>${escapeHTML(slot.reason)}</p><div><button class="text-button" type="button" data-nutrition-action="liked" data-nutrition-date="${today}" data-nutrition-slot="${slot.id}" data-meal-id="${escapeHTML(slot.selected.id)}">Gostei</button><button class="text-button" type="button" data-nutrition-swap="${slot.id}" data-nutrition-date="${today}">Trocar</button><button class="text-button danger" type="button" data-nutrition-action="disliked" data-nutrition-date="${today}" data-nutrition-slot="${slot.id}" data-meal-id="${escapeHTML(slot.selected.id)}">Não serve</button></div></article>`;
+      const liked = state.nutritionHistory.some(item => item.mealId === slot.selected.id && item.action === "liked");
+      const badge = slot.selected.badge ? `<b class="meal-badge">${escapeHTML(slot.selected.badge)}</b>` : "";
+      return `<article class="meal-option"><header><span>${escapeHTML(slot.label)}</span>${badge}</header><h3>${escapeHTML(slot.selected.name)}</h3><p class="meal-composition">${escapeHTML(slot.selected.composition)}</p><p class="meal-point">${escapeHTML(slot.selected.point)}</p><details class="meal-why"><summary>Por quê?</summary><p>${escapeHTML(slot.selected.reason)}</p></details><div class="meal-actions"><button class="meal-action ${liked ? "is-liked" : ""}" type="button" data-nutrition-action="liked" data-nutrition-date="${today}" data-nutrition-slot="${slot.id}" data-meal-id="${escapeHTML(slot.selected.id)}" aria-pressed="${liked}" ${liked ? "disabled" : ""}>${liked ? "Gostei ✓" : "Gostei"}</button><button class="meal-action" type="button" data-nutrition-swap="${slot.id}" data-nutrition-date="${today}">Trocar</button><button class="meal-action danger" type="button" data-nutrition-reject data-nutrition-date="${today}" data-nutrition-slot="${slot.id}" data-meal-id="${escapeHTML(slot.selected.id)}" data-meal-name="${escapeHTML(slot.selected.name)}">Não serve</button></div></article>`;
     }).join("");
     $("#nutritionToday").classList.add("nutrition-recommendation");
-    $("#nutritionToday").innerHTML = `<div class="nutrition-context"><span class="eyebrow">FOCO DE HOJE · ${escapeHTML(guidance.level.toUpperCase())}</span><h2>${todaySession ? `${numberBR(todaySession.distance)} km · RPE ${escapeHTML(todaySession.rpe)}` : "Rotina sem corrida"}</h2><p>${escapeHTML(guidance.focus)}</p><small>Hidratação: ${escapeHTML(guidance.hydration)}</small></div><div class="nutrition-meals">${slotMarkup}</div><p class="nutrition-safety">${escapeHTML(guidance.safetyNote)} · Motor nutricional v${guidance.engineVersion}</p>`;
+    $("#nutritionToday").innerHTML = `<aside class="nutrition-context"><span class="nutrition-demand">${escapeHTML(guidance.level)}</span><span class="eyebrow">FOCO DE HOJE</span><h2>${todaySession ? `${numberBR(todaySession.distance)} km · RPE ${escapeHTML(todaySession.rpe)}` : "Rotina sem corrida"}</h2><p>${escapeHTML(guidance.focus)}</p><dl><div><dt>Horário</dt><dd>${escapeHTML(guidance.timeContext)}</dd></div><div><dt>Refeições</dt><dd>${guidance.slots.length} contextos</dd></div><div><dt>Variedade</dt><dd>${guidance.librarySize} templates</dd></div></dl><small><b>Hidratação</b>${escapeHTML(guidance.hydration)}</small></aside><div class="nutrition-plan"><div class="nutrition-plan-head"><div><span class="eyebrow">SEU DIA</span><h2>Refeições em contexto</h2></div><small>Troque uma opção sem alterar as outras.</small></div><div class="nutrition-meals">${slotMarkup}</div></div><p class="nutrition-safety">${escapeHTML(guidance.safetyNote)} · Motor nutricional v${guidance.engineVersion}</p>`;
     const planByDate = new Map(adaptivePlan.map(session => [session.date, session]));
     const days = Array.from({ length: 7 }, (_, index) => localISO(addDays(parseDate(today), index)));
-    $("#nutritionWeek").innerHTML = days.map(date => { const item = nutritionRecommendations(state, planByDate.get(date), date); return `<div class="nutrition-day"><span><b>${escapeHTML(parseDate(date).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""))}</b><small>${escapeHTML(dateLabel(date))}</small></span><div><strong>${escapeHTML(item.level)}</strong><small>${escapeHTML(item.focus)}</small></div></div>`; }).join("");
+    $("#nutritionWeek").innerHTML = days.map(date => { const item = nutritionRecommendations(state, planByDate.get(date), date); return `<div class="nutrition-day"><span><b>${escapeHTML(parseDate(date).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""))}</b><small>${escapeHTML(dateLabel(date))}</small></span><div><strong>${escapeHTML(item.level)}</strong><small>${escapeHTML(item.slots.map(slot => slot.label).join(" · "))}</small></div></div>`; }).join("");
     $("#nutritionContext").textContent = state.nutritionProfile?.goal === "body-composition"
-      ? "Refeições consistentes alinhadas ao seu objetivo corporal"
-      : "Refeições consistentes para sustentar treino e recuperação";
+      ? "Consistência sem transformar peso em regra"
+      : "Variedade que cabe na rotina";
+  }
+
+  function ensureNutritionPlan(guidance) {
+    let changed = false;
+    guidance.slots.forEach((slot, index) => {
+      if (!slot.selected) return;
+      const latest = [...state.nutritionHistory].reverse().find(item => item.date === guidance.date && item.slot === slot.id && item.action === "selected");
+      if (latest?.mealId === slot.selected.id) return;
+      state.nutritionHistory.push(createNutritionFeedback({ date: guidance.date, slot: slot.id, mealId: slot.selected.id, action: "selected" }, new Date(Date.now() + index)));
+      changed = true;
+    });
+    return changed;
   }
 
   function saveNutritionInteraction({ date, slot, mealId, action }) {
     state.nutritionHistory.push(createNutritionFeedback({ date, slot, mealId, action }));
-    saveState(action === "liked" ? "Preferência salva para próximas sugestões." : action === "disliked" ? "Essa opção perderá prioridade." : "Refeição substituída.");
+    saveState(action === "liked" ? "Preferência salva para próximas sugestões." : "Refeição substituída sem alterar o restante do dia.");
     renderNutrition();
   }
 
@@ -545,9 +560,21 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     const guidance = nutritionRecommendations(state, session, date);
     const slot = guidance.slots.find(item => item.id === slotId);
     if (!slot || slot.options.length < 2) { showToast("Não há outra opção compatível com seu perfil agora."); return; }
-    const currentIndex = slot.options.findIndex(item => item.id === slot.selected?.id);
-    const next = slot.options[(currentIndex + 1) % slot.options.length];
+    const next = slot.options.find(item => item.id !== slot.selected?.id);
     saveNutritionInteraction({ date, slot: slotId, mealId: next.id, action: "selected" });
+  }
+
+  function openNutritionFeedback(button) {
+    const form = $("#nutritionFeedbackForm");
+    form.reset();
+    form.elements.date.value = button.dataset.nutritionDate;
+    form.elements.slot.value = button.dataset.nutritionSlot;
+    form.elements.mealId.value = button.dataset.mealId;
+    $("#nutritionFeedbackMeal").textContent = button.dataset.mealName;
+    $("#nutritionBlockedIngredient").hidden = true;
+    form.elements.blockedIngredient.required = false;
+    $("#nutritionFeedbackMessage").textContent = "";
+    $("#nutritionFeedbackModal").showModal();
   }
 
   function shoeDistance(shoe) {
@@ -1034,6 +1061,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       if (nutritionAction) saveNutritionInteraction({ date: nutritionAction.dataset.nutritionDate, slot: nutritionAction.dataset.nutritionSlot, mealId: nutritionAction.dataset.mealId, action: nutritionAction.dataset.nutritionAction });
       const nutritionSwap = event.target.closest("[data-nutrition-swap]");
       if (nutritionSwap) swapNutritionOption(nutritionSwap.dataset.nutritionDate, nutritionSwap.dataset.nutritionSwap);
+      const nutritionReject = event.target.closest("[data-nutrition-reject]");
+      if (nutritionReject) openNutritionFeedback(nutritionReject);
       const raceCard = event.target.closest("[data-race-history]"); if (raceCard) { selectedRaceHistory = raceCard.dataset.raceHistory; renderRaceHistory(); }
       const equipmentPhotoButton = event.target.closest("[data-equipment-photo]");
       if (equipmentPhotoButton) { equipmentPhotoTargetId = equipmentPhotoButton.dataset.equipmentPhoto; $("#equipmentQuickPhotoInput").value = ""; $("#equipmentQuickPhotoInput").click(); }
@@ -1053,6 +1082,37 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       const deleteJournal = event.target.closest("[data-delete-journal]");
       if (deleteJournal) { state.journal = state.journal.filter(item => item.id !== deleteJournal.dataset.deleteJournal); saveState("Nota removida do diário."); renderAll(); }
       const closeButton = event.target.closest("[data-close]"); if (closeButton) closeButton.closest("dialog")?.close();
+    });
+
+    $("#nutritionFeedbackForm").addEventListener("change", event => {
+      if (event.target.name !== "reasonCode") return;
+      const cannotEat = event.target.value === "cannot-eat";
+      $("#nutritionBlockedIngredient").hidden = !cannotEat;
+      event.currentTarget.elements.blockedIngredient.required = cannotEat;
+      if (!cannotEat) event.currentTarget.elements.blockedIngredient.value = "";
+    });
+
+    $("#nutritionFeedbackForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = new FormData(form);
+      const reasonCode = String(data.get("reasonCode") || "");
+      const blockedIngredient = String(data.get("blockedIngredient") || "").trim();
+      if (!reasonCode) { $("#nutritionFeedbackMessage").textContent = "Escolha um motivo."; return; }
+      if (reasonCode === "cannot-eat" && !blockedIngredient) { $("#nutritionFeedbackMessage").textContent = "Informe o alimento que deve ser bloqueado."; form.elements.blockedIngredient.focus(); return; }
+      if (blockedIngredient) {
+        const normalized = blockedIngredient.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        if (!state.nutritionProfile.restrictions.some(item => item.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === normalized)) state.nutritionProfile.restrictions.push(blockedIngredient);
+      }
+      const date = String(data.get("date"));
+      const slot = String(data.get("slot"));
+      const mealId = String(data.get("mealId"));
+      state.nutritionHistory.push(createNutritionFeedback({ date, slot, mealId, action: "rejected", reasonCode, blockedIngredient }));
+      const session = adaptivePlan.find(item => item.date === date);
+      ensureNutritionPlan(nutritionRecommendations(state, session, date));
+      saveState(blockedIngredient ? `${blockedIngredient} foi bloqueado e a refeição foi trocada.` : "Feedback salvo. Somente esta refeição foi trocada.");
+      $("#nutritionFeedbackModal").close();
+      renderNutrition();
     });
 
     $("#menuButton").addEventListener("click", event => { const open = $("#sidebar").classList.toggle("open"); event.currentTarget.setAttribute("aria-expanded", String(open)); $(".sidebar-scrim").hidden = !open; });

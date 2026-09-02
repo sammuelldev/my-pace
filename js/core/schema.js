@@ -146,7 +146,9 @@ function normalizeNutritionHistory(item) {
     id: cleanString(item?.id, 120) || stableId("nutrition", item),
     date: validDate(item?.date) ? item.date : todayISO(),
     slot: cleanString(item?.slot, 30), mealId: cleanString(item?.mealId, 100),
-    action: ["liked", "disliked", "selected"].includes(item?.action) ? item.action : "selected",
+    action: ["liked", "disliked", "rejected", "selected"].includes(item?.action) ? item.action : "selected",
+    reasonCode: cleanString(item?.reasonCode, 80),
+    blockedIngredient: cleanString(item?.blockedIngredient, 80),
     engineVersion: clamp(Number(item?.engineVersion) || 1, 1, 100),
     createdAt: cleanString(item?.createdAt, 40) || stableTimestamp(item)
   };

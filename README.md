@@ -1,4 +1,4 @@
-# MyPace 2.0
+# MyPace
 
 Aplicação web multiusuário para corrida, construída em HTML, CSS e JavaScript modular. O MyPace combina o perfil declarado no onboarding com dados observados nos treinos para produzir recomendações determinísticas, conservadoras e explicáveis.
 
@@ -8,7 +8,7 @@ Aplicação web multiusuário para corrida, construída em HTML, CSS e JavaScrip
 - painel privado, isolado por usuário no Firebase;
 - onboarding progressivo com histórico, disponibilidade, objetivos, prova, segurança e alimentação;
 - calendário adaptativo, check-in de prontidão, RPE, treinos perdidos e substituições;
-- biblioteca de refeições filtrada por padrão alimentar, alergias, restrições e feedback;
+- biblioteca com mais de 200 refeições, slots por horário de treino, filtros de segurança, anti-repetição e feedback contextual;
 - revisão semanal, recordes, conquistas, estimativa conservadora, linha do tempo e diário;
 - preparação, semana da prova, resultado e leitura pós-prova;
 - backup JSON, exclusão de conta, temas, PWA leve e funcionamento local durante falhas de rede.
@@ -88,6 +88,12 @@ Os motores não usam IA generativa nem respostas aleatórias. Eles recebem estad
 - explicações em português.
 
 O perfil declarado orienta o começo. Depois de uma amostra mínima, o perfil observado passa a ter mais peso. Estimativas só aparecem com dados suficientes e sempre como faixa. Fontes revisadas ficam em `js/data/research-sources.js`; políticas conservadoras internas são identificadas como tais.
+
+## Alimentação adaptativa
+
+O motor nutricional classifica a demanda do dia por tipo de sessão, duração, RPE, experiência e carga recente. A partir disso, monta refeições específicas para manhã, tarde, noite, descanso ou força. IDs não se repetem no mesmo dia; seleções recentes perdem prioridade; alergias, restrições e rejeições por segurança são exclusões absolutas.
+
+O plano diário é determinístico e suas escolhas ficam em `nutritionHistory`, o que mantém a mesma composição após atualizar a página. `Gostei`, `Trocar` e `Não serve` alteram recomendações futuras sem substituir o restante do dia. Os 14 IDs da biblioteca anterior continuam válidos para preservar feedback já sincronizado.
 
 ## Firebase
 

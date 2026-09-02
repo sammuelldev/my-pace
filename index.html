@@ -124,7 +124,7 @@
 
         <section class="view" id="corpo"><div class="page-head"><div><span class="eyebrow">EVOLUÇÃO CORPORAL</span><h1>Corpo</h1><p>Acompanhe métricas corporais apenas se isso fizer sentido para você.</p></div></div><article class="panel weight-hero"><div><span class="eyebrow">PESO REGISTRADO</span><h2><strong id="currentWeight">—</strong> <span id="currentWeightUnit">kg</span></h2><p id="weightSummary">Nenhum registro ainda</p><div class="progress"><i id="weightProgress"></i></div></div><form id="weightForm"><label for="weightInput">Peso atual</label><div><input id="weightInput" type="number" min="30" max="250" step="0.1" placeholder="Ex.: 65,5"><button class="button primary" type="submit">Registrar</button></div></form></article><article class="panel chart-panel"><div class="panel-head"><div><span class="eyebrow">TENDÊNCIA</span><h3>Evolução do peso</h3></div></div><div class="chart tall" id="weightChart"></div></article></section>
 
-        <section class="view" id="alimentacao"><div class="page-head"><div><span class="eyebrow">ROTINA ADAPTATIVA</span><h1>Alimentação</h1><p>Organização das cinco refeições atualizada conforme o próximo estímulo.</p></div></div><article class="nutrition-focus" id="nutritionToday"></article><div class="nutrition-grid"><article class="panel"><div class="panel-head"><div><span class="eyebrow">PRÓXIMOS 7 DIAS</span><h3>Foco alimentar</h3></div><span>◇</span></div><div id="nutritionWeek"></div></article><article class="shake-card"><span class="eyebrow">BASE DA ROTINA</span><h2 id="nutritionContext">Cinco refeições com energia consistente</h2><p>O plano preserva os alimentos que você já consegue manter.</p><div><span>2 ovos + pão</span><span>Arroz + feijão</span><span>Frango</span><span>Cuscuz</span><span>Vitamina de banana</span><span>Guaraná do Amazonas</span></div><small>Sugestões organizacionais; não substituem nutricionista.</small></article></div></section>
+        <section class="view" id="alimentacao"><div class="page-head"><div><span class="eyebrow">ROTINA ADAPTATIVA</span><h1>Alimentação</h1><p>Refeições organizadas pelo horário, demanda do treino e preferências que você informou.</p></div></div><article class="nutrition-focus" id="nutritionToday" aria-live="polite"></article><div class="nutrition-grid"><article class="panel"><div class="panel-head"><div><span class="eyebrow">PRÓXIMOS 7 DIAS</span><h3>Contexto da semana</h3></div><span aria-hidden="true">◇</span></div><div id="nutritionWeek"></div></article><article class="shake-card nutrition-principles"><span class="eyebrow">COMO O PLANO ESCOLHE</span><h2 id="nutritionContext">Variedade que cabe na rotina</h2><p>As sugestões cruzam treino, horário e perfil alimentar sem transformar peso em regra única.</p><ul><li>Alergias e restrições são bloqueios</li><li>O mesmo prato não se repete no dia</li><li>Seu feedback muda as próximas opções</li></ul><small>Sugestões organizacionais; não substituem nutricionista.</small></article></div></section>
 
         <section class="view" id="equipamentos"><div class="page-head"><div><span class="eyebrow">CONTROLE DE USO</span><h1>Equipamentos</h1><p>Acompanhe o uso e a quilometragem dos seus equipamentos.</p></div><button class="button primary" data-open="shoeModal">＋ Adicionar equipamento</button></div><div class="equipment-grid" id="equipmentList"></div></section>
 
@@ -181,6 +181,26 @@
       <button class="button full" type="button" id="markWorkoutMissed">Hoje não consigo treinar</button>
       <small class="modal-footnote">O MyPace não acumula nem dobra o próximo treino para compensar.</small>
     </div>
+  </dialog>
+
+  <dialog class="modal nutrition-feedback-modal" id="nutritionFeedbackModal">
+    <form method="dialog" class="modal-card" id="nutritionFeedbackForm">
+      <button class="modal-close" type="button" data-close aria-label="Fechar">&times;</button>
+      <span class="eyebrow">AJUSTAR ESTA SUGESTÃO</span><h2>Por que não serve?</h2>
+      <p class="muted" id="nutritionFeedbackMeal">Conte o motivo para melhorar as próximas escolhas.</p>
+      <input name="date" type="hidden"><input name="slot" type="hidden"><input name="mealId" type="hidden">
+      <fieldset class="nutrition-reason-options">
+        <legend>Escolha um motivo</legend>
+        <label><input type="radio" name="reasonCode" value="dont-like" required><span>Não gosto</span></label>
+        <label><input type="radio" name="reasonCode" value="missing-ingredients"><span>Não tenho os ingredientes</span></label>
+        <label><input type="radio" name="reasonCode" value="takes-too-long"><span>Demora demais</span></label>
+        <label><input type="radio" name="reasonCode" value="cannot-eat"><span>Não posso comer</span></label>
+        <label><input type="radio" name="reasonCode" value="want-another"><span>Quero outra opção</span></label>
+      </fieldset>
+      <label id="nutritionBlockedIngredient" hidden>Qual alimento deve ser bloqueado?<input name="blockedIngredient" maxlength="80" placeholder="Ex.: leite, amendoim ou soja"><small>Esse item será adicionado às suas restrições alimentares.</small></label>
+      <p class="form-message" id="nutritionFeedbackMessage" role="alert"></p>
+      <button class="button primary full" type="submit">Salvar e trocar esta refeição</button>
+    </form>
   </dialog>
 
   <dialog class="modal onboarding-modal" id="onboardingModal">

@@ -42,6 +42,18 @@ test("equipamentos aceitam foto sem exibir balão de tipo", () => {
   assert.doesNotMatch(equipmentRenderer, /class="chip"/);
 });
 
+test("alimentação oferece feedback acessível e cartões móveis com toque seguro", () => {
+  const html = readFileSync("index.html", "utf8");
+  const app = readFileSync("js/app.js", "utf8");
+  const css = readFileSync("css/styles.css", "utf8");
+  assert.match(html, /id="nutritionFeedbackModal"/);
+  assert.match(html, /value="cannot-eat"/);
+  assert.match(app, /<details class="meal-why">/);
+  assert.match(app, /data-nutrition-reject/);
+  assert.match(css, /\.meal-action\{[^}]*min-height:44px/);
+  assert.match(css, /@media\(max-width:760px\)\{\.nutrition-focus[\s\S]*?\.nutrition-meals\{grid-template-columns:1fr\}/);
+});
+
 test("service worker referencia apenas arquivos existentes do app shell", () => {
   const worker = readFileSync("service-worker.js", "utf8");
   const shellBlock = worker.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || "";
