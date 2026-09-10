@@ -13,6 +13,14 @@ Aplicação web multiusuário para corrida, construída em HTML, CSS e JavaScrip
 - preparação, semana da prova, resultado e leitura pós-prova;
 - backup JSON, exclusão de conta, temas, PWA leve e funcionamento local durante falhas de rede.
 
+## Navegação e uso no celular
+
+A tela inicial prioriza a próxima sessão ainda não registrada e mostra a semana com dados reais. O esforço aparece em linguagem simples, com a explicação da recomendação disponível no próprio cartão. O objetivo pode ser ajustado sem cadastrar uma prova.
+
+Os cinco acessos principais são Início, Plano, Treinos, Evolução e Mais. Treinos reúne corridas, diário e resultados de provas; links antigos para `#historico` continuam abrindo os registros. No celular, a navegação inferior respeita a área segura da tela e o menu lateral controla foco, rolagem e fechamento pelo teclado.
+
+O visual compartilhado está em `css/experience.css`; os resumos de apresentação e ícones estão em `js/core/presentation.js` e `js/core/icons.js`. A versão da entrada JavaScript também consta no cache do service worker para manter a nova interface compatível durante a atualização de instalações antigas.
+
 ## Executar localmente
 
 Não há compilação. Sirva a pasta por HTTP para que módulos ES e o service worker funcionem:

@@ -1,16 +1,20 @@
-const CACHE_NAME = "mypace-shell-v5";
+const CACHE_NAME = "mypace-shell-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./css/styles.css",
+  "./css/experience.css",
   "./manifest.webmanifest",
   "./assets/mypace-runner.png",
   "./assets/mypace-runner-icon.png",
   "./assets/og-pace.png",
   "./js/app.js",
+  "./js/app.js?v=6",
   "./js/cloud.js",
   "./js/firebase-config.js",
   "./js/core/schema.js",
+  "./js/core/presentation.js",
+  "./js/core/icons.js",
   "./js/core/storage.js",
   "./js/data/achievement-definitions.js",
   "./js/data/nutrition-library.js",

@@ -62,6 +62,17 @@ test("service worker referencia apenas arquivos existentes do app shell", () => 
   paths.forEach(path => assert.equal(existsSync(path), true, `${path} precisa existir`));
 });
 
+test("entradas da interface, inclusive URLs versionadas, estão no cache de atualização", () => {
+  const html = readFileSync("index.html", "utf8");
+  const worker = readFileSync("service-worker.js", "utf8");
+  const entries = [...html.matchAll(/(?:src|href)="((?:js|css)\/[^\"]+)"/g)].map(match => match[1]);
+  assert.ok(entries.length >= 3);
+  for (const entry of entries) {
+    assert.ok(worker.includes(`"./${entry}"`), `${entry} deve estar disponível com a mesma URL no cache`);
+    assert.equal(existsSync(entry.split("?")[0]), true);
+  }
+});
+
 test("todas as fontes citadas pelas regras existem e têm URL HTTPS", () => {
   const sources = new Map(RESEARCH_SOURCES.map(source => [source.id, source]));
   RECOMMENDATION_RULES.flatMap(rule => rule.sourceIds || []).forEach(id => assert.ok(sources.has(id), `Fonte ausente: ${id}`));

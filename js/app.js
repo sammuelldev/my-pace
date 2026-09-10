@@ -30,6 +30,9 @@ import { createNutritionFeedback, nutritionRecommendations } from "./domains/nut
 import { buildProgressInsights, reconcileAchievements } from "./domains/progress-engine.js";
 import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js";
 
+import { GOAL_LABELS, resolveView, navigationSection, describeEffort, buildWeekSummary, nextUnrecordedSession } from "./core/presentation.js";
+import { icon, renderIcons } from "./core/icons.js";
+
 (() => {
   "use strict";
 
@@ -54,6 +57,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   let applyingCloud = false;
   let lastDeletedWorkout = null;
   let activeStorageKey = null;
+  let hasScopedLocalState = false;
   let pendingAccountName = "";
   let onboardingPreparedForUid = null;
   let substitutionSessionId = null;
@@ -179,6 +183,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     desktopSync.innerHTML = '<i></i><span>Salvo neste dispositivo</span>';
     $(".sidebar-bottom")?.prepend(desktopSync);
 
+    $("#sidebar").insertAdjacentHTML("afterbegin", `<button class="icon-button sidebar-close" id="closeSidebar" type="button" aria-label="Fechar menu">${icon("close")}</button>`);
     const sidebarScrim = document.createElement("button");
     sidebarScrim.className = "sidebar-scrim";
     sidebarScrim.type = "button";
@@ -189,8 +194,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     const readiness = document.createElement("article");
     readiness.className = "readiness-card panel";
     readiness.id = "readinessCard";
-    readiness.innerHTML = '<div class="readiness-copy"><span class="eyebrow">PRONTIDÃO DE HOJE</span><h3 id="readinessTitle">Como seu corpo acordou?</h3><p class="muted" id="readinessText">Sono, energia e desconforto ajudam o Pace a sugerir a intensidade mais segura para hoje.</p></div><div class="readiness-score" id="readinessScore" aria-label="Prontidão ainda não informada"><strong>—</strong><span>sem check-in</span></div><button class="button" type="button" data-open="readinessModal" id="readinessButton">Fazer check-in</button>';
-    $("#inicio .metrics")?.before(readiness);
+    readiness.innerHTML = '<div class="readiness-copy"><span class="eyebrow">PRONTIDÃO DE HOJE</span><h3 id="readinessTitle">Como seu corpo acordou?</h3><p class="muted" id="readinessText">Sono, energia e desconforto ajudam o MyPace a sugerir a intensidade mais segura para hoje.</p></div><div class="readiness-score" id="readinessScore" aria-label="Prontidão ainda não informada"><strong>—</strong><span>sem check-in</span></div><button class="button" type="button" data-open="readinessModal" id="readinessButton">Fazer check-in</button>';
+    $("#homeContext")?.prepend(readiness);
 
     const historyInput = $("#historySearch");
     const historyFilters = document.createElement("div");
@@ -267,19 +272,40 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     return { runs, totalKm, longest, best3k: runs3k.length ? Math.min(...runs3k.map(run => run.durationSeconds)) : null, best5k: runs5k.length ? Math.min(...runs5k.map(run => run.durationSeconds)) : null };
   }
 
+  let sidebarOpener = null;
+  function setSidebar(open, restoreFocus = true) {
+    const sidebar = $("#sidebar");
+    const mobile = window.matchMedia("(max-width: 760px)").matches;
+    open = open && mobile;
+    if (open) sidebarOpener = document.activeElement;
+    sidebar.classList.toggle("open", open);
+    sidebar.inert = mobile && !open;
+    $(".sidebar-scrim").hidden = !open;
+    $("#menuButton").setAttribute("aria-expanded", String(open));
+    document.body.classList.toggle("menu-open", open);
+    $(".shell").inert = open;
+    if (open) $("#closeSidebar").focus();
+    else if (restoreFocus && sidebarOpener) { sidebarOpener.focus(); sidebarOpener = null; }
+  }
+
+  function showTrainingTab(tab) {
+    if (!["records", "journal", "races"].includes(tab)) return;
+    $$(".activity-tabs [data-training-tab]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.trainingTab === tab)));
+    $$("[data-training-panel]").forEach(panel => { panel.hidden = panel.dataset.trainingPanel !== tab; });
+  }
+
   function navigate(view, updateUrl = true) {
+    view = resolveView(view);
     if (!document.getElementById(view)?.classList.contains("view")) return;
     $$(".view").forEach(section => section.classList.toggle("active", section.id === view));
-    $$('[data-view]').forEach(button => {
-      const active = button.dataset.view === view;
+    $$(".side-nav [data-view], .mobile-nav [data-view]").forEach(button => {
+      const active = button.dataset.view === navigationSection(view);
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     });
-    $("#sidebar").classList.remove("open");
-    const scrim = $(".sidebar-scrim"); if (scrim) scrim.hidden = true;
-    $("#menuButton")?.setAttribute("aria-expanded", "false");
+    setSidebar(false, false);
     if (updateUrl && window.location.hash !== `#${view}`) history.pushState({ view }, "", `#${view}`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
     const heading = $(`#${view} h1`); if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
   }
 
@@ -294,6 +320,9 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   function renderGreeting() {
     const hour = new Date().getHours();
     $("#greeting").textContent = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+    $("#homeDate").textContent = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date()).toLocaleUpperCase("pt-BR");
+    $("#homeGoal").textContent = GOAL_LABELS[state.goals.primary] || GOAL_LABELS.consistency;
+    $("#homeGoalText").textContent = state.goals.motivation || "Cada registro ajuda a construir o seu próximo passo.";
   }
 
   function renderRace() {
@@ -360,26 +389,53 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   }
 
   function renderNextWorkout() {
-    const session = adaptivePlan[0];
-    if (!session) return;
+    const session = nextUnrecordedSession(adaptivePlan, state.workouts, state.races);
     const today = localISO();
-    $("#todayType").textContent = session.type;
-    $("#todayDate").textContent = session.date === today ? "Hoje" : dateLabel(session.date);
-    $("#todayDistance").textContent = numberBR(session.distance);
-    $("#todayRpe").textContent = session.rpe;
-    $("#todayPace").textContent = session.pace;
-    $("#todayObjective").textContent = `◉ ${session.objective}`;
-    $("#todayDetails").textContent = session.details;
-    const checkIn = session.date === today ? state.readiness[today] : null;
+    const recordedToday = state.workouts.some(run => run.date === today && run.status === "completed");
+    $("#todayEyebrow").textContent = recordedToday ? "TREINO REGISTRADO · PRÓXIMO PASSO" : session?.date === today ? "SEU TREINO DE HOJE" : "SEU PRÓXIMO TREINO";
+    $("#todayType").textContent = session?.type || "Seu ritmo continua aqui";
+    $("#todayDate").textContent = session ? session.date === today ? "Hoje" : dateLabel(session.date) : "Sem sessão prevista";
+    $("#todayDistance").textContent = session ? numberBR(session.distance) : "—";
+    $("#todayRpe").textContent = session?.rpe || "—";
+    $("#todayPace").textContent = session?.pace || "No seu tempo";
+    $("#todayObjective").textContent = session?.objective || "Consulte o plano ou registre uma corrida.";
+    $("#todayDetails").textContent = session?.details || (activeRace() ? "Há uma prova aguardando resultado. Atualize sua prova para seguir com o próximo ciclo." : "Seu plano considera os dias em que você pode treinar. Você também pode registrar uma corrida feita fora do plano.");
+    const checkIn = session?.date === today ? state.readiness[today] : null;
     const score = readinessScore(checkIn);
-    if (score !== null && score < 45) {
+    if (score !== null && score < 45 && !session?.race) {
       $("#todayRpe").textContent = "2–3";
       $("#todayObjective").textContent = "Recuperar e observar o corpo";
       $("#todayDetails").textContent = "Seu check-in indica baixa prontidão. Prefira descanso ou uma sessão muito leve; dor forte é sinal para não correr.";
-    } else if (score !== null && score < 70) {
-      $("#todayRpe").textContent = "3–4";
-      $("#todayDetails").textContent = `${session.details} Hoje, reduza o ritmo se a sensação de esforço subir cedo.`;
+    } else if (score !== null && score < 70 && !session?.race) {
+      $("#todayDetails").textContent += " Hoje, reduza o ritmo se a sensação de esforço subir cedo.";
     }
+    const rpe = $("#todayRpe").textContent;
+    $("#todayEffort").textContent = describeEffort(rpe);
+    const bars = Math.ceil(Math.max(...(rpe.match(/\d+/g) || [0]).map(Number)) / 2);
+    $$(".effort-bars i").forEach((bar, index) => bar.classList.toggle("filled", index < bars));
+    const explanations = session?.recommendation?.explanations || [];
+    $("#todayWhy").innerHTML = explanations.slice(0, 2).map(text => `<p>${escapeHTML(text)}</p>`).join("");
+    $(".workout-explanation").hidden = !explanations.length;
+    const raceToday = session?.race && session.date === today;
+    const action = $("#todayAction");
+    delete action.dataset.view;
+    if (session?.race && !raceToday) {
+      delete action.dataset.open;
+      action.dataset.view = "prova";
+      action.innerHTML = `${icon("flag")}Ver preparação`;
+    } else {
+      action.dataset.open = raceToday ? "raceResultModal" : "workoutModal";
+      action.innerHTML = `${icon("check")}${raceToday ? "Registrar resultado" : "Registrar treino"}`;
+    }
+  }
+
+  function renderWeek() {
+    const days = buildWeekSummary(state.workouts, state.races, adaptivePlan);
+    const names = { completed: "treino registrado", planned: "corrida planejada", rest: "sem corrida planejada", empty: "sem registro" };
+    $("#weekDays").innerHTML = days.map(day => {
+      const label = `${day.label}, ${day.day}: ${names[day.status]}${day.today ? ", hoje" : ""}${day.status === "completed" ? `, ${numberBR(day.distance)} km` : ""}`;
+      return `<div class="week-day day-${day.status}${day.today ? " today" : ""}" aria-label="${escapeHTML(label)}"${day.today ? ' aria-current="date"' : ""}><span aria-hidden="true">${day.label}</span><b aria-hidden="true">${day.status === "completed" ? icon("check") : day.day}</b><i aria-hidden="true"></i></div>`;
+    }).join("");
   }
 
   function renderMetrics() {
@@ -389,7 +445,12 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     const week = weeklyWorkouts();
     const weeklyKm = week.reduce((sum, run) => sum + run.distance, 0);
     $("#weeklyKm").textContent = numberBR(weeklyKm);
-    $("#weeklyProgress").style.width = `${clamp(weeklyKm / weeklyGoal * 100, 0, 100)}%`;
+    const percent = weeklyGoal > 0 ? Math.round(weeklyKm / weeklyGoal * 100) : 0;
+    $("#weeklyProgress").style.width = `${clamp(percent, 0, 100)}%`;
+    $("#weeklyPercent").textContent = `${percent}%`;
+    $("#weeklyProgressTrack").setAttribute("aria-valuenow", String(clamp(percent, 0, 100)));
+    $("#weeklyProgressTrack").setAttribute("aria-valuetext", `${numberBR(weeklyKm)} de ${numberBR(weeklyGoal)} quilômetros`);
+    renderWeek();
     $("#weeklyGoal").textContent = `${state.settings.adaptiveGoal ? "Meta adaptativa" : "Meta pessoal"}: ${numberBR(weeklyGoal)} km`;
     $("#weeklyCount").textContent = `${week.length} ${week.length === 1 ? "treino" : "treinos"}`;
     $("#best3k").textContent = summary.best3k ? durationLabel(summary.best3k) : "Em construção";
@@ -414,7 +475,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   function renderWorkouts() {
     const workouts = sortedWorkouts();
     $("#recentWorkouts").innerHTML = workoutRows(workouts, 3);
-    $("#trainingList").innerHTML = workoutRows(workouts);
+
     const typeFilter = $("#historyType");
     if (typeFilter) {
       const selected = typeFilter.value;
@@ -435,7 +496,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     scoreBox.innerHTML = `<strong>${score ?? "—"}${score === null ? "" : "%"}</strong><span>${label}</span>`;
     scoreBox.setAttribute("aria-label", score === null ? "Prontidão ainda não informada" : `Prontidão ${score} por cento: ${label}`);
     $("#readinessTitle").textContent = score === null ? "Como seu corpo acordou?" : score >= 70 ? "Boa prontidão para treinar" : score >= 45 ? "Treine com atenção" : "Hoje pede recuperação";
-    $("#readinessText").textContent = score === null ? "Sono, energia e desconforto ajudam o Pace a sugerir a intensidade mais segura para hoje." : score >= 70 ? "Seu check-in está equilibrado. Ainda assim, ajuste o esforço pelas sensações durante a corrida." : score >= 45 ? "Considere reduzir duração ou intensidade caso o esforço fique alto logo no início." : "Prefira descanso ou atividade muito leve. Não corra com dor forte ou crescente.";
+    $("#readinessText").textContent = score === null ? "Sono, energia e desconforto ajudam o MyPace a sugerir a intensidade mais segura para hoje." : score >= 70 ? "Seu check-in está equilibrado. Ainda assim, ajuste o esforço pelas sensações durante a corrida." : score >= 45 ? "Considere reduzir duração ou intensidade caso o esforço fique alto logo no início." : "Prefira descanso ou atividade muito leve. Não corra com dor forte ou crescente.";
     $("#readinessButton").textContent = score === null ? "Fazer check-in" : "Atualizar check-in";
   }
 
@@ -717,7 +778,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     renderJournal();
   }
 
-  function openProfileModal() { pendingPhoto = state.profile.photo; $("#profileNameInput").value = state.profile.name; applyAvatar(pendingPhoto, state.profile.name); $("#profileModal").showModal(); }
+  function openProfileModal() { setSidebar(false, false); pendingPhoto = state.profile.photo; $("#profileNameInput").value = state.profile.name; applyAvatar(pendingPhoto, state.profile.name); $("#profileModal").showModal(); }
 
   function openWorkoutForm(workout = null) {
     const form = $("#workoutForm");
@@ -926,6 +987,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   }
 
   function showSignedOutRoute() {
+    setSidebar(false, false);
     document.body.classList.remove("authenticated");
     $("#productApp").hidden = true;
     $("#authGate").hidden = false;
@@ -940,7 +1002,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     $("#productApp").hidden = false;
     document.body.classList.add("authenticated");
     renderAll();
-    const requestedView = window.location.hash.slice(1);
+    const requestedView = resolveView(window.location.hash.slice(1));
     navigate(document.getElementById(requestedView)?.classList.contains("view") ? requestedView : "inicio", false);
     setTimeout(openOnboardingIfNeeded, 0);
   }
@@ -951,6 +1013,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     try { scoped = loadLocalState(localStorage, activeStorageKey); }
     catch (_) { scoped = createDefaultState(); }
     const legacy = hasMeaningfulData(scoped) ? null : claimLegacyStateForUser(user.uid);
+    hasScopedLocalState = hasMeaningfulData(scoped) || Boolean(legacy);
     state = hasMeaningfulData(scoped) ? scoped : (legacy || scoped);
     const accountName = pendingAccountName || user.displayName || "";
     if (state.profile.name === "Atleta" && accountName) state.profile.name = accountName.slice(0, 40);
@@ -1008,7 +1071,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
         const wasFirstSnapshot = firstSnapshot;
         firstSnapshot = false;
         const normalizedRemote = normalizeState(remoteState);
-        const nextState = wasFirstSnapshot ? mergeLocalAndRemote(state, normalizedRemote) : normalizedRemote;
+        // A fresh device has newer default timestamps, but no edits to merge.
+        const nextState = wasFirstSnapshot && hasScopedLocalState ? mergeLocalAndRemote(state, normalizedRemote) : normalizedRemote;
         const shouldPersistMigration = wasFirstSnapshot && (cloudMeta.source === "legacy" || JSON.stringify(nextState) !== JSON.stringify(normalizedRemote));
         applyingCloud = true; state = nextState; persistLocal(); renderAll(); applyingCloud = false;
         if ((state.settings.onboarded || state.workouts.length) && $("#onboardingModal").open) $("#onboardingModal").close();
@@ -1035,9 +1099,11 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       const authModeButton = event.target.closest("[data-auth-mode]");
       if (authModeButton) showAuthMode(authModeButton.dataset.authMode);
       const viewButton = event.target.closest("[data-view]"); if (viewButton) navigate(viewButton.dataset.view);
+      const trainingTab = event.target.closest("[data-training-tab]"); if (trainingTab) showTrainingTab(trainingTab.dataset.trainingTab);
       const modalButton = event.target.closest("[data-open]");
       if (modalButton) {
         const id = modalButton.dataset.open;
+        if (id === "goalModal") { const form = $("#goalForm"); form.elements.primary.value = state.goals.primary; form.elements.motivation.value = state.goals.motivation; $("#goalRaceNote").hidden = state.goals.primary !== "race" || Boolean(activeRace()); }
         if (id === "nextRaceModal") { openRaceForm(); return; }
         if (id === "raceResultModal") { if (prepareRaceResult()) $("#raceResultModal").showModal(); return; }
         if (id === "workoutModal") { openWorkoutForm(); return; }
@@ -1115,9 +1181,33 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
       renderNutrition();
     });
 
-    $("#menuButton").addEventListener("click", event => { const open = $("#sidebar").classList.toggle("open"); event.currentTarget.setAttribute("aria-expanded", String(open)); $(".sidebar-scrim").hidden = !open; });
-    $("#mobileMore").addEventListener("click", () => { $("#sidebar").classList.add("open"); $("#menuButton").setAttribute("aria-expanded", "true"); $(".sidebar-scrim").hidden = false; });
-    $(".sidebar-scrim").addEventListener("click", () => { $("#sidebar").classList.remove("open"); $("#menuButton").setAttribute("aria-expanded", "false"); $(".sidebar-scrim").hidden = true; });
+    $("#menuButton").addEventListener("click", () => setSidebar(!$("#sidebar").classList.contains("open")));
+    $("#closeSidebar").addEventListener("click", () => setSidebar(false));
+    $(".sidebar-scrim").addEventListener("click", () => setSidebar(false));
+    window.matchMedia("(max-width: 760px)").addEventListener("change", () => setSidebar(false));
+    document.addEventListener("keydown", event => {
+      if (!$("#sidebar").classList.contains("open")) return;
+      if (event.key === "Escape") { event.preventDefault(); setSidebar(false); }
+      if (event.key === "Tab") {
+        const buttons = $$("button:not([disabled])", $("#sidebar"));
+        const first = buttons[0], last = buttons.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
+    $("#goalForm").elements.primary.addEventListener("change", event => { $("#goalRaceNote").hidden = event.target.value !== "race" || Boolean(activeRace()); });
+    $("#goalForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const primary = form.elements.primary.value;
+      if (!GOAL_LABELS[primary]) return;
+      state.goals = { ...state.goals, primary, targetDistanceKm: primary === "5k" ? 5 : primary === "10k" ? 10 : null, motivation: form.elements.motivation.value.trim().slice(0, 300) };
+      state.settings.primaryGoal = primary;
+      saveState("Objetivo atualizado. Um passo de cada vez.");
+      $("#goalModal").close();
+      renderAll();
+      if (primary === "race" && !activeRace()) openRaceForm();
+    });
     $("#openProfile").addEventListener("click", openProfileModal); $("#settingsProfile").addEventListener("click", openProfileModal);
     $("#openDeleteAccount").addEventListener("click", openProfileModal);
     $("#deleteAccountButton").addEventListener("click", () => { $("#deleteAccountForm").reset(); $("#deleteAccountMessage").textContent = ""; $("#deleteAccountModal").showModal(); });
@@ -1135,7 +1225,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     $("#profileForm").addEventListener("submit", async event => {
       event.preventDefault(); const name = $("#profileNameInput").value.trim(); if (!name) { showToast("Digite seu nome."); return; }
       const submit = event.currentTarget.querySelector('button[type="submit"]'); submit.disabled = true; submit.textContent = "Salvando…";
-      try { const previousPhoto = state.profile.photo; if (cloudUser && pendingPhoto?.startsWith("data:image/")) pendingPhoto = await uploadProfilePhoto(cloudUser.uid, pendingPhoto); else if (cloudUser && !pendingPhoto && previousPhoto) await removeCloudProfilePhoto(cloudUser.uid); state.profile = { name: name.slice(0, 40), photo: pendingPhoto }; saveState("Perfil atualizado."); $("#profileModal").close(); renderAll(); }
+      try { const previousPhoto = state.profile.photo; if (cloudUser && pendingPhoto?.startsWith("data:image/")) pendingPhoto = await uploadProfilePhoto(cloudUser.uid, pendingPhoto); else if (cloudUser && !pendingPhoto && previousPhoto) await removeCloudProfilePhoto(cloudUser.uid); state.profile = { ...state.profile, name: name.slice(0, 40), photo: pendingPhoto }; saveState("Perfil atualizado."); $("#profileModal").close(); renderAll(); }
       catch (error) { showToast(friendlyFirebaseError(error)); }
       finally { submit.disabled = false; submit.textContent = "Salvar perfil"; }
     });
@@ -1249,7 +1339,7 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
     }));
 
     $("#exportData").addEventListener("click", () => { const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `pace-backup-${localISO()}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); showToast("Backup exportado."); });
-    $("#importData").addEventListener("change", event => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = normalizeState(JSON.parse(reader.result)); if (!window.confirm("Importar este backup e substituir os dados atuais?")) return; state = imported; saveState("Backup importado. Experiência recalculada."); selectedPlan = 0; renderAll(); } catch (_) { showToast("Esse arquivo não é um backup válido do Pace."); } finally { event.target.value = ""; } }; reader.readAsText(file); });
+    $("#importData").addEventListener("change", event => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = normalizeState(JSON.parse(reader.result)); if (!window.confirm("Importar este backup e substituir os dados atuais?")) return; state = imported; saveState("Backup importado. Experiência recalculada."); selectedPlan = 0; renderAll(); } catch (_) { showToast("Esse arquivo não é um backup válido do MyPace."); } finally { event.target.value = ""; } }; reader.readAsText(file); });
 
     $("#cloudAccount").addEventListener("click", () => cloudUser ? navigate("configuracoes") : openCloudLogin()); $("#cloudAction").addEventListener("click", openCloudLogin); $("#cloudSignOut").addEventListener("click", async () => { await signOutCloud(); showToast("Conta desconectada. Os dados locais foram mantidos."); });
     $("#authGoogle").addEventListener("click", async event => {
@@ -1286,6 +1376,8 @@ import { analyzeRaceResult, buildRaceExperience } from "./domains/race-engine.js
   }
 
   setupEnhancements();
+  renderIcons();
+  setSidebar(false, false);
   bindEvents();
   $("#workoutForm [name=date]").value = localISO();
   $("#journalForm [name=date]").value = localISO();
